@@ -128,6 +128,7 @@ class VectorStoreManager:
         self.manifest = self._load_manifest()
         self.index = None
         self.meta_data = [] # List corresponding to index vectors
+        self._chunk_map = {} # {file_id: {chunk_index: content}} for context lookup
         self._load_index()
 
     def _load_manifest(self) -> Dict[str, Any]:
@@ -148,10 +149,23 @@ class VectorStoreManager:
             self.index = faiss.read_index(str(self.faiss_index_path))
             with open(self.faiss_meta_path, 'rb') as f:
                 self.meta_data = pickle.load(f)
+            self._build_chunk_map()
         else:
             log.info("Initializing new index")
             self.index = None # Will be initialized on first add
             self.meta_data = []
+            self._chunk_map = {}
+
+    def _build_chunk_map(self):
+        """Builds a fast lookup map for context windowing."""
+        self._chunk_map = {}
+        for meta in self.meta_data:
+            fid = meta.get("source_file_id")
+            idx = meta.get("chunk_index")
+            if fid is not None and idx is not None:
+                if fid not in self._chunk_map:
+                    self._chunk_map[fid] = {}
+                self._chunk_map[fid][idx] = meta.get("content", "")
 
     def save(self):
         """Save Manifest, Index and Meta data to disk."""
@@ -208,17 +222,19 @@ class VectorStoreManager:
             self.meta_data = new_meta
         self.manifest["files"] = [f for f in self.manifest.get("files", []) if f.get("id") != file_id]
         self.save()
+        self._build_chunk_map()
         return True
 
-    def search(self, query: str, top_k: int = 5, file_ids: Optional[List[str]] = None) -> List[Dict]:
+    def search(self, query: str, top_k: int = 5, file_ids: Optional[List[str]] = None, include_context: bool = False, window_size: int = 1) -> List[Dict]:
         """
         Search knowledge base.
         
         Args:
             query: Query string.
             top_k: Number of results to return.
-            file_ids: List of file IDs to filter by. If None, search all files.
-                      Uses post-filtering strategy (retrieve more, then filter).
+            file_ids: List of file IDs to filter by.
+            include_context: Whether to retrieve adjacent chunks for each result.
+            window_size: Number of chunks before and after to retrieve.
         """
         if self.index is None or self.index.ntotal == 0:
             return []
@@ -266,6 +282,26 @@ class VectorStoreManager:
                 "type": meta.get("type"),
                 "metadata": meta
             }
+
+            if include_context:
+                fid = meta.get("source_file_id")
+                idx = meta.get("chunk_index")
+                if fid and idx is not None and fid in self._chunk_map:
+                    context_chunks = []
+                    # Get range [idx - window_size, idx + window_size]
+                    for i in range(idx - window_size, idx + window_size + 1):
+                        content = self._chunk_map[fid].get(i)
+                        if content:
+                            context_chunks.append(content)
+                    
+                    if context_chunks:
+                        # Join with separators to indicate boundaries
+                        result_item["context_content"] = "\n[...]\n".join(context_chunks)
+                    else:
+                        result_item["context_content"] = meta.get("content")
+                else:
+                    result_item["context_content"] = meta.get("content")
+
             results.append(result_item)
             
             if len(results) >= top_k:

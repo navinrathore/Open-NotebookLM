@@ -17,8 +17,10 @@ from workflow_engine.promptstemplates.resources.pt_qa_agent_repo import QaAgent 
 log = get_logger(__name__)
 
 # 文档上下文长度限制（字符数）
-MAX_DOC_CONTEXT_CHARS = 48000
-RAG_TOP_K = 30
+MAX_DOC_CONTEXT_CHARS = int(os.getenv("MAX_DOC_CONTEXT_CHARS", "48000"))
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "15"))
+RAG_SIMILARITY_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.3"))
+RAG_CONTEXT_WINDOW_SIZE = int(os.getenv("RAG_CONTEXT_WINDOW_SIZE", "1"))
 MAX_HISTORY_TURNS = 10
 SOURCE_PREVIEW_CHARS = 100
 
@@ -312,9 +314,15 @@ def try_rag_retrieve(state: IntelligentQAState) -> None:
             query=state.request.query,
             top_k=RAG_TOP_K,
             file_ids=file_ids,
+            include_context=(RAG_CONTEXT_WINDOW_SIZE > 0),
+            window_size=RAG_CONTEXT_WINDOW_SIZE
         )
-        state.retrieved_chunks = results
-        log.info(f"RAG 检索到 {len(results)} 个片段")
+        
+        # Apply Similarity Threshold Filtering (Roadmap #4)
+        filtered_results = [item for item in results if (item.get("score") or 0) >= RAG_SIMILARITY_THRESHOLD]
+        
+        state.retrieved_chunks = filtered_results
+        log.info(f"RAG 检索到 {len(results)} 个片段, 过滤后剩余 {len(filtered_results)} 个 (Threshold: {RAG_SIMILARITY_THRESHOLD}, Window: {RAG_CONTEXT_WINDOW_SIZE})")
     except Exception as e:
         log.warning(f"RAG 检索跳过: {e}")
         state.retrieved_chunks = []
@@ -358,7 +366,8 @@ def build_doc_context(state: IntelligentQAState) -> str:
         except Exception:
             pass
         for item in state.retrieved_chunks:
-            content = (item.get("content") or "").strip()
+            # Use context_content if available (Roadmap #2 Context Windowing)
+            content = (item.get("context_content") or item.get("content") or "").strip()
             if not content:
                 continue
             fid = item.get("source_file_id", "")
