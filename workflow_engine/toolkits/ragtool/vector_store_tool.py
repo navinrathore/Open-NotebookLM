@@ -11,7 +11,7 @@ import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 
-import fitz  # PyMuPDF，MinerU 失败时回退用
+import fitz  # PyMuPDF, fallback for when MinerU fails
 from PIL import Image
 
 # Import existing tools
@@ -26,7 +26,8 @@ log = get_logger(__name__)
 
 def _chunk_text(text: str, chunk_size: int = 500, chunk_overlap: int = 80) -> List[str]:
     """
-    使用 LangChain RecursiveCharacterTextSplitter 分块；未安装时返回空列表，由调用方回退到简单分块。
+    Chunk text using LangChain RecursiveCharacterTextSplitter; if not installed, returns an empty list, 
+    allowing the caller to fall back to simple chunking.
     """
     try:
         from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -423,7 +424,7 @@ class VectorStoreManager:
                 err_text = f"{type(e).__name__}: {repr(e)}"
             file_record["error"] = err_text
             
-        # 清理同一路径的旧记录，避免历史 failed 记录干扰本次结果
+        # Clean up old records for the same path to avoid interference from old failed records.
         self.manifest["files"] = [
             f for f in self.manifest.get("files", [])
             if (f.get("original_path") or "") != str(file_path)
@@ -458,7 +459,7 @@ class VectorStoreManager:
         return pdf_path
 
     def _pdf_to_markdown_fallback(self, file_path: Path, output_subdir: Path) -> Path:
-        """MinerU 不可用时的回退：用 PyMuPDF 抽正文并写入单个 .md，返回 md 路径。"""
+        """Fallback when MinerU is unavailable: extract text using PyMuPDF and write to a single .md file, returns the md path."""
         stem = file_path.stem
         out_dir = output_subdir / stem
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -494,7 +495,7 @@ class VectorStoreManager:
         pdf_stem = file_path.stem
         mineru_output_folder = output_subdir / pdf_stem
 
-        # 检测已有 MinerU 缓存：如果 {output_subdir}/{pdf_stem}/auto/*.md 已存在则跳过
+        # Detect existing MinerU cache: if {output_subdir}/{pdf_stem}/auto/*.md already exists, skip it.
         md_file = None
         cached = False
         if mineru_output_folder.exists():
@@ -505,7 +506,7 @@ class VectorStoreManager:
                     if existing_md:
                         md_file = existing_md
                         cached = True
-                        log.info("[MinerU] 复用已有缓存: %s", md_file)
+                        log.info("[MinerU] Reusing existing cache: %s", md_file)
                         break
 
         if not cached:
@@ -518,7 +519,7 @@ class VectorStoreManager:
                     None,
                     "pipeline",
                 )
-                log.info("[MinerU] 解析完成，输出根目录: %s", output_subdir)
+                log.info("[MinerU] Extraction complete, output root: %s", output_subdir)
                 md_file = next(mineru_output_folder.rglob("*.md"), None)
             except Exception as e:
                 log.warning(f"MinerU failed ({file_path.name}), using PyMuPDF fallback: {e}")
@@ -580,7 +581,7 @@ class VectorStoreManager:
             self._add_vectors(vectors, meta_list)
             record["chunks_count"] = len(chunks)
 
-            # 在 MinerU 输出目录写入 chunks_info.json，便于确认是否做了分块及每块预览
+            # Write chunks_info.json to the MinerU output directory to confirm chunking and provide previews.
             chunks_info_path = output_subdir / "chunks_info.json"
             try:
                 chunks_info = {

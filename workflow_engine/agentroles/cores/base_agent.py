@@ -1,18 +1,18 @@
 """
-BaseAgent 模块 - Agent 系统的核心基类
+BaseAgent Module - Core Base Class for the Agent System
 
-本模块定义了 BaseAgent 抽象基类，它是所有 Agent 角色的基础。
-BaseAgent 提供了统一的执行模式、工具管理、消息构建和结果解析等核心功能。
+This module defines the BaseAgent abstract base class, which is the foundation for all Agent roles.
+BaseAgent provides a unified execution mode, tool management, message construction, and result parsing.
 
-主要功能：
-- 多种执行模式：简单模式、ReAct模式、并行模式、图模式
-- 工具管理：前置工具和后置工具的执行
-- 消息构建：系统提示词和任务提示词的生成
-- 结果解析：支持 JSON、XML、文本等多种格式
-- Agent-as-Tool：将 Agent 包装为可被其他 Agent 调用的工具
-- VLM 支持：视觉语言模型的集成
+Main Features:
+- Multiple Execution Modes: Simple, ReAct, Parallel, Graph
+- Tool Management: Execution of pre-tools and post-tools
+- Message Construction: Generation of system prompts and task prompts
+- Result Parsing: Support for JSON, XML, text, and other formats
+- Agent-as-Tool: Wrapping an Agent as a tool to be called by other Agents
+- VLM Support: Integration of Vision Language Models
 
-使用示例：
+Example Usage:
     class MyAgent(BaseAgent):
         @property
         def role_name(self) -> str:
@@ -26,14 +26,14 @@ BaseAgent 提供了统一的执行模式、工具管理、消息构建和结果�
         def task_prompt_template_name(self) -> str:
             return "my_agent_task"
 
-作者: Zhou Liu
-版本: 1.0.0
+Author: Zhou Liu
+Version: 1.0.0
 """
 
 from __future__ import annotations
 
 # =============================================================================
-# 标准库导入
+# Standard Library Imports
 # =============================================================================
 import asyncio
 import datetime
@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Callable, Tuple
 
 # =============================================================================
-# 第三方库导入
+# Third-party Library Imports
 # =============================================================================
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage, AIMessage
@@ -51,7 +51,7 @@ from langchain_core.tools import Tool
 from pydantic import BaseModel, Field
 
 # =============================================================================
-# 项目内部导入
+# Internal Project Imports
 # =============================================================================
 from workflow_engine.llm_callers.base import BaseLLMCaller
 from workflow_engine.parsers.parsers import BaseParser
@@ -64,66 +64,66 @@ from workflow_engine.logger import get_logger
 from workflow_engine.agentroles.cores.strategies import ExecutionStrategy
 
 # =============================================================================
-# 常量定义
+# Constants Definition
 # =============================================================================
 PROJDIR = get_project_root()
-"""项目根目录路径"""
+"""Project root directory path"""
 
 log = get_logger(__name__)
-"""模块日志记录器"""
+"""Module log recorder"""
 
 # =============================================================================
-# 类型定义
+# Type Definitions
 # =============================================================================
 ValidatorFunc = Callable[[str, Dict[str, Any]], Tuple[bool, Optional[str]]]
 """
-验证器函数类型定义
+Validator function type definition
 
-验证器用于 ReAct 模式中验证 LLM 输出的正确性。
+Used in ReAct mode to validate the correctness of LLM output.
 
-参数:
-    content (str): LLM 原始输出内容
-    parsed_result (Dict[str, Any]): 解析后的结果字典
+Parameters:
+    content (str): LLM raw output content
+    parsed_result (Dict[str, Any]): Parsed result dictionary
 
-返回:
-    Tuple[bool, Optional[str]]: (是否通过验证, 错误信息)
-        - 如果通过验证，返回 (True, None)
-        - 如果未通过验证，返回 (False, "错误描述")
+Returns:
+    Tuple[bool, Optional[str]]: (Validation passed, error message)
+        - If passed, returns (True, None)
+        - If failed, returns (False, "Error description")
 """
 
 
 class BaseAgent(ABC):
     """
-    Agent 基类 - 定义通用的 Agent 执行模式
+    BaseAgent Class - Defines general Agent execution modes
     
-    BaseAgent 是所有 Agent 角色的抽象基类，提供了完整的 Agent 生命周期管理，
-    包括初始化、消息构建、LLM 调用、结果解析和状态更新等核心功能。
+    BaseAgent is the abstract base class for all Agent roles, providing full lifecycle management,
+    including initialization, message construction, LLM calling, result parsing, and state updates.
     
-    核心特性：
-        1. 自动注册：子类定义时自动注册到 AgentRegistry
-        2. 多执行模式：支持简单、ReAct、并行、图等多种执行模式
-        3. 工具集成：支持前置工具和后置工具的管理和执行
-        4. 灵活解析：支持 JSON、XML、文本等多种输出格式解析
-        5. VLM 支持：集成视觉语言模型能力
-        6. Agent-as-Tool：可将 Agent 包装为工具供其他 Agent 调用
+    Core Features:
+        1. Auto-registration: Subclasses are automatically registered to AgentRegistry
+        2. Multiple execution modes: Supports Simple, ReAct, Parallel, Graph, etc.
+        3. Tool integration: Supports management and execution of pre-tools and post-tools
+        4. Flexible parsing: Supports JSON, XML, text, and other format parsing
+        5. VLM support: Integrated Vision Language Model capabilities
+        6. Agent-as-Tool: Can wrap an Agent as a tool for others to call
     
-    子类必须实现的抽象属性：
-        - role_name: Agent 角色名称
-        - system_prompt_template_name: 系统提示词模板名称
-        - task_prompt_template_name: 任务提示词模板名称
+    Abstract properties that subclasses must implement:
+        - role_name: Agent role name
+        - system_prompt_template_name: System prompt template name
+        - task_prompt_template_name: Task prompt template name
     
     Attributes:
-        tool_manager (ToolManager): 工具管理器实例
-        model_name (str): LLM 模型名称
-        temperature (float): LLM 温度参数
-        max_tokens (int): 最大 token 数
-        tool_mode (str): 工具调用模式
-        react_mode (bool): 是否启用 ReAct 模式
-        react_max_retries (int): ReAct 最大重试次数
-        parser_type (str): 解析器类型
-        use_vlm (bool): 是否使用视觉语言模型
-        ignore_history (bool): 是否忽略消息历史
-        message_history (AdvancedMessageHistory): 消息历史管理器
+        tool_manager (ToolManager): Tool manager instance
+        model_name (str): LLM model name
+        temperature (float): LLM temperature parameter
+        max_tokens (int): Maximum token count
+        tool_mode (str): Tool call mode
+        react_mode (bool): Whether to enable ReAct mode
+        react_max_retries (int): Maximum ReAct retries
+        parser_type (str): Parser type
+        use_vlm (bool): Whether to use Vision Language Model
+        ignore_history (bool): Whether to ignore message history
+        message_history (AdvancedMessageHistory): Message history manager
     
     Example:
         >>> class WriterAgent(BaseAgent):
@@ -149,22 +149,22 @@ class BaseAgent(ABC):
 
     def __init_subclass__(cls, **kwargs):
         """
-        子类注册钩子
+        Subclass registration hook
         
-        当定义 BaseAgent 的子类时自动调用，将子类注册到 AgentRegistry 中。
-        这使得可以通过角色名称动态创建 Agent 实例。
+        Automatically called when a subclass of BaseAgent is defined, registering the subclass in AgentRegistry.
+        This allows for dynamic creation of Agent instances via role names.
         
-        注册过程：
-            1. 创建子类的临时实例（使用 tool_manager=None）
-            2. 获取实例的 role_name
-            3. 将 (role_name.lower(), cls) 注册到 AgentRegistry
+        Registration process:
+            1. Create a temporary instance of the subclass (using tool_manager=None)
+            2. Get its role_name
+            3. Register (role_name.lower(), cls) into AgentRegistry
         
         Args:
-            **kwargs: 传递给父类的关键字参数
+            **kwargs: Keyword arguments passed to the parent class
         
         Note:
-            如果子类初始化失败（例如缺少必要参数），注册会静默失败。
-            这是为了允许抽象子类的定义。
+            If subclass initialization fails (e.g., missing required params), registration fails silently.
+            This is to allow the definition of abstract subclasses.
         """
         super().__init_subclass__(**kwargs)
         try:
@@ -195,26 +195,26 @@ class BaseAgent(ABC):
                  chat_api_url: Optional[str] = None,
                  execution_config: Optional[Any] = None):
         """
-        初始化 BaseAgent 实例
+        Initialize BaseAgent instance
         
         Args:
-            tool_manager (ToolManager, optional): 工具管理器，用于管理前置和后置工具
-            model_name (str, optional): LLM 模型名称，如 "gpt-4"、"claude-3"
-            temperature (float): LLM 温度参数，控制输出随机性，默认 0.0
-            max_tokens (int): 最大输出 token 数，默认 65536 (64k)
-            tool_mode (str): 工具调用模式，可选 "auto"、"required"、"none"
-            react_mode (bool): 是否启用 ReAct 模式（带验证的循环调用）
-            react_max_retries (int): ReAct 模式最大重试次数，默认 3
-            parser_type (str): 解析器类型，可选 "json"、"xml"、"text"
-            parser_config (dict, optional): 解析器配置，如 XML 的 root_tag
-            use_vlm (bool): 是否使用视觉语言模型
-            vlm_config (dict, optional): VLM 配置，包含 mode、image_path 等
-            ignore_history (bool): 是否忽略消息历史，默认 True
-            message_history (AdvancedMessageHistory, optional): 消息历史管理器
-            chat_api_url (str, optional): 自定义 API 端点 URL
-            execution_config (Any, optional): 执行策略配置，用于高级执行控制
+            tool_manager (ToolManager, optional): Tool manager for managing pre and post tools
+            model_name (str, optional): LLM model name, e.g., "gpt-4", "claude-3"
+            temperature (float): LLM temperature parameter, controls randomness, default 0.0
+            max_tokens (int): Maximum output token count, default 65536 (64k)
+            tool_mode (str): Tool call mode, options "auto", "required", "none"
+            react_mode (bool): Whether to enable ReAct mode (looping calls with verification)
+            react_max_retries (int): Maximum retries for ReAct mode, default 3
+            parser_type (str): Parser type, options "json", "xml", "text"
+            parser_config (dict, optional): Parser configuration, e.g., root_tag for XML
+            use_vlm (bool): Whether to use Vision Language Model
+            vlm_config (dict, optional): VLM configuration, including mode, image_path, etc.
+            ignore_history (bool): Whether to ignore message history, default True
+            message_history (AdvancedMessageHistory, optional): Message history manager
+            chat_api_url (str, optional): Custom API endpoint URL
+            execution_config (Any, optional): Execution strategy configuration for advanced control
         """
-        # ----- 基础配置 -----
+        # ----- Base Configuration -----
         self.tool_manager = tool_manager
         self.model_name = model_name
         self.temperature = temperature
@@ -224,30 +224,30 @@ class BaseAgent(ABC):
         self.react_max_retries = react_max_retries
         self.chat_api_url = chat_api_url
         
-        # ----- 解析器配置 -----
+        # ----- Parser Configuration -----
         self.parser_type = parser_type
         self.parser_config = parser_config or {}
-        self._parser = None  # 懒加载，首次访问时创建
+        self._parser = None  # Lazy loading, created on first access
         
-        # ----- VLM 配置 -----
+        # ----- VLM Configuration -----
         self.use_vlm = use_vlm
         self.vlm_config = vlm_config or {}
         
-        # ----- 消息历史配置 -----
+        # ----- Message History Configuration -----
         self.ignore_history = ignore_history
         self.message_history = message_history or AdvancedMessageHistory()
 
-        # ----- 策略模式支持 -----
+        # ----- Strategy Pattern Support -----
         self._execution_strategy: Optional[ExecutionStrategy] = None
         if execution_config:
-            # 从执行配置中更新 agent 属性
-            # 这解决了通过 create_simple_agent 等函数创建时参数不生效的问题
+            # Update agent attributes from execution config
+            # This fixes the issue where parameters don't take effect when created via create_simple_agent etc.
             for f in execution_config.__dataclass_fields__:
                 config_value = getattr(execution_config, f)
                 if hasattr(self, f) and config_value is not None:
                     setattr(self, f, config_value)
 
-            # 创建执行策略
+            # Create execution strategy
             from workflow_engine.agentroles.cores.strategies import StrategyFactory
             self._execution_strategy = StrategyFactory.create(
                 execution_config.mode.value,
@@ -258,17 +258,17 @@ class BaseAgent(ABC):
     @classmethod
     def create(cls, tool_manager: Optional[ToolManager] = None, **kwargs) -> "BaseAgent":
         """
-        工厂方法 - 统一的 Agent 创建入口
+        Factory Method - Unified entry point for Agent creation
         
-        提供一个标准化的方式来创建 Agent 实例，确保所有 Agent
-        都通过相同的接口创建，便于依赖注入和测试。
+        Provides a standardized way to create Agent instances, ensuring all Agents
+        are created through the same interface, facilitating dependency injection and testing.
         
         Args:
-            tool_manager (ToolManager, optional): 工具管理器实例
-            **kwargs: 传递给 __init__ 的其他参数
+            tool_manager (ToolManager, optional): Tool manager instance
+            **kwargs: Other arguments passed to __init__
         
         Returns:
-            BaseAgent: 创建的 Agent 实例（实际类型为调用此方法的子类）
+            BaseAgent: Created Agent instance (actual type is the subclass calling this method)
         
         Example:
             >>> agent = WriterAgent.create(tool_manager=tm, temperature=0.7)
@@ -283,16 +283,16 @@ class BaseAgent(ABC):
     @abstractmethod
     def role_name(self) -> str:
         """
-        角色名称 - 子类必须实现
+        Role Name - Must be implemented by subclasses
         
-        返回 Agent 的唯一标识名称，用于：
-        - 注册到 AgentRegistry
-        - 存储执行结果到 state.agent_results
-        - 日志记录和调试
-        - 工具管理器中的角色匹配
+        Returns a unique identification name for the Agent, used for:
+        - Registration in AgentRegistry
+        - Storing execution results in state.agent_results
+        - Logging and debugging
+        - Role matching in tool manager
         
         Returns:
-            str: Agent 角色名称，如 "Classifier"、"Writer"、"Recommender"
+            str: Agent role name, e.g., "Classifier", "Writer", "Recommender"
         
         Example:
             >>> @property
@@ -305,16 +305,16 @@ class BaseAgent(ABC):
     @abstractmethod
     def system_prompt_template_name(self) -> str:
         """
-        系统提示词模板名称 - 子类必须实现
+        System Prompt Template Name - Must be implemented by subclasses
         
-        返回用于生成系统提示词的模板名称。
-        模板文件应位于 promptstemplates/resources 目录下。
+        Returns the template name used for generating system prompts.
+        Template files should be located in the promptstemplates/resources directory.
         
         Returns:
-            str: 模板名称，如 "writer_system"、"classifier_system"
+            str: Template name, e.g., "writer_system", "classifier_system"
         
         Note:
-            模板使用 Jinja2 语法，可以包含变量占位符。
+            Templates use Jinja2 syntax and can contain variable placeholders.
         """
         pass
     
@@ -322,13 +322,13 @@ class BaseAgent(ABC):
     @abstractmethod
     def task_prompt_template_name(self) -> str:
         """
-        任务提示词模板名称 - 子类必须实现
+        Task Prompt Template Name - Must be implemented by subclasses
         
-        返回用于生成任务提示词的模板名称。
-        任务提示词包含具体的任务指令和上下文信息。
+        Returns the template name used for generating task prompts.
+        Task prompts contains specific task instructions and context information.
         
         Returns:
-            str: 模板名称，如 "writer_task"、"classifier_task"
+            str: Template name, e.g., "writer_task", "classifier_task"
         """
         pass
 
@@ -339,29 +339,29 @@ class BaseAgent(ABC):
     @property
     def parser(self) -> BaseParser:
         """
-        获取解析器实例（懒加载）
+        Get Parser instance (Lazy loading)
         
-        根据 parser_type 和 parser_config 创建对应的解析器。
-        解析器用于将 LLM 的原始输出转换为结构化数据。
+        Creates the corresponding parser based on parser_type and parser_config.
+        Parsers are used to transform the LLM's raw output into structured data.
         
-        支持的解析器类型：
-        - json: JSON 格式解析，支持 schema 验证
-        - xml: XML 格式解析，支持自定义 root_tag
-        - text: 纯文本，不做解析
+        Supported Parser types:
+        - json: JSON format parsing, supports schema verification
+        - xml: XML format parsing, supports custom root_tag
+        - text: Plain text, no parsing
         
         Returns:
-            BaseParser: 解析器实例
+            BaseParser: Parser instance
         
         Note:
-            解析器在首次访问时创建，之后复用同一实例。
+            Parsers are created on first access and the same instance is reused thereafter.
         """
         if self._parser is None:
             from workflow_engine.parsers import ParserFactory
             
-            # 合并 parser_config 和快捷配置
+            # Merge parser_config and shortcut configs
             config = self.parser_config.copy() if self.parser_config else {}
             
-            # 如果是 JSON 解析器，合并 schema 相关配置
+            # If it's a JSON parser, merge schema related configs
             if self.parser_type == "json":
                 if hasattr(self, 'response_schema') and self.response_schema:
                     config['schema'] = self.response_schema
@@ -377,17 +377,17 @@ class BaseAgent(ABC):
     
     def parse_result(self, content: str) -> Dict[str, Any]:
         """
-        使用配置的解析器解析 LLM 输出结果
+        Use the configured parser to parse LLM output results
         
-        将 LLM 的原始文本输出转换为结构化的字典格式。
+        Converts the LLM's raw text output into a structured dictionary format.
         
         Args:
-            content (str): LLM 原始输出内容
+            content (str): LLM raw output content
         
         Returns:
-            Dict[str, Any]: 解析后的结果字典
-                - 成功时返回解析后的数据
-                - 失败时返回 {"raw": content, "error": error_message}
+            Dict[str, Any]: Parsed result dictionary
+                - Returns parsed data on success
+                - Returns {"raw": content, "error": error_message} on failure
         
         Example:
             >>> result = agent.parse_result('{"status": "success", "data": [1, 2, 3]}')
@@ -396,11 +396,11 @@ class BaseAgent(ABC):
         """
         try:
             parsed = self.parser.parse(content)
-            log.info(f"{self.role_name} 使用 {self.parser_type} 解析器解析成功")
-            log.critical(f"[parse_result 解析结果] : {parsed}")
+            log.info(f"{self.role_name} parsed successfully using {self.parser_type} parser")
+            log.critical(f"[parse_result result] : {parsed}")
             return parsed
         except Exception as e:
-            log.exception(f"解析失败: {e}")
+            log.exception(f"Parsing failed: {e}")
             return {"raw": content, "error": str(e)}
 
     # =========================================================================
@@ -411,61 +411,61 @@ class BaseAgent(ABC):
                        state: MainState, 
                        pre_tool_results: Dict[str, Any]) -> List[BaseMessage]:
         """
-        构建 LLM 输入消息列表
+        Build LLM input message list
         
-        根据系统提示词模板和任务提示词模板生成完整的消息列表，
-        包括格式说明（如果使用解析器）。
+        Generates a complete list of messages based on system prompt templates and task prompt templates,
+        including format instructions (if a parser is used).
         
         Args:
-            state (MainState): 当前状态对象，包含请求信息
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            state (MainState): Current state object, containing request info
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            List[BaseMessage]: 消息列表，包含 SystemMessage 和 HumanMessage
+            List[BaseMessage]: Message list, containing SystemMessage and HumanMessage
         
-        消息结构：
-            1. SystemMessage: 系统提示词 + 格式说明
-            2. HumanMessage: 任务提示词（包含前置工具结果）
+        Message structure:
+            1. SystemMessage: System prompt + Format instructions
+            2. HumanMessage: Task prompt (including pre-tool results)
         """
-        log.info("构建提示词消息...")
+        log.info("Building prompt messages...")
         
-        # 创建提示词生成器
+        # Create prompt generator
         ptg = PromptsTemplateGenerator(state.request.language)
         
-        # 渲染系统提示词
+        # Render system prompt
         sys_prompt = ptg.render(self.system_prompt_template_name)
         
-        # 添加解析器格式说明（VLM 模式可能不需要）
+        # Add parser format instructions (VLM mode might not need this)
         format_instruction = self.parser.get_format_instruction()
         if format_instruction and not self.use_vlm:
             sys_prompt += f"\n\n{format_instruction}"
         
-        # 渲染任务提示词
+        # Render task prompt
         task_params = self.get_task_prompt_params(pre_tool_results)
         task_prompt = ptg.render(self.task_prompt_template_name, **task_params)
-        log.info(f"[build_messages]任务提示词: {task_prompt}")
+        log.info(f"[build_messages] Task prompt: {task_prompt}")
         
-        # 构建消息列表
+        # Build message list
         messages = [
             SystemMessage(content=sys_prompt),
             HumanMessage(content=task_prompt),
         ]
         
-        log.info("提示词消息构建完成")
+        log.info("Prompt message construction complete")
         return messages
     
     def get_task_prompt_params(self, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
         """
-        获取任务提示词参数 - 子类可重写
+        Get task prompt parameters - Can be overridden by subclasses
         
-        将前置工具结果转换为任务提示词模板所需的参数。
-        子类可以重写此方法以自定义参数处理逻辑。
+        Converts pre-tool results into parameters required for the task prompt template.
+        Subclasses can override this method to customize parameter processing logic.
         
         Args:
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            Dict[str, Any]: 提示词模板参数字典
+            Dict[str, Any]: Prompt template parameters dictionary
         
         Example:
             >>> def get_task_prompt_params(self, pre_tool_results):
@@ -478,15 +478,15 @@ class BaseAgent(ABC):
     
     def build_generation_prompt(self, pre_tool_results: Dict[str, Any]) -> str:
         """
-        构建生成提示词（用于 VLM 图像生成模式）
+        Build generation prompt (for VLM image generation mode)
         
-        将前置工具结果整合到 VLM 配置的 prompt 中。
+        Integrates pre-tool results into the prompt configured for VLM.
         
         Args:
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            str: 生成提示词
+            str: Generation prompt
         """
         return f"{self.vlm_config.get('prompt', '')}"
 
@@ -496,22 +496,22 @@ class BaseAgent(ABC):
     
     def get_llm_caller(self, state: MainState) -> BaseLLMCaller:
         """
-        根据配置返回对应的 LLM Caller
+        Return the corresponding LLM Caller based on the configuration
         
-        根据 use_vlm 配置选择返回 VisionLLMCaller 或 TextLLMCaller。
+        Selects and returns VisionLLMCaller or TextLLMCaller based on the use_vlm configuration.
         
         Args:
-            state (MainState): 当前状态对象
+            state (MainState): Current state object
         
         Returns:
-            BaseLLMCaller: LLM 调用器实例
+            BaseLLMCaller: LLM caller instance
         
         Note:
-            此方法目前未被广泛使用，主要使用 create_llm 方法。
+            This method is currently not widely used; the create_llm method is primarily used instead.
         """
         if self.use_vlm:
             from workflow_engine.llm_callers import VisionLLMCaller
-            log.info(f"使用 VisionLLMCaller，模式: {self.vlm_config.get('mode', 'understanding')}")
+            log.info(f"Using VisionLLMCaller, mode: {self.vlm_config.get('mode', 'understanding')}")
             return VisionLLMCaller(
                 state,
                 vlm_config=self.vlm_config,
@@ -536,30 +536,30 @@ class BaseAgent(ABC):
 
     def create_llm(self, state: MainState, bind_post_tools: bool = False) -> ChatOpenAI:
         """
-        创建 LLM 实例
+        Create LLM instance
         
-        根据配置创建 ChatOpenAI 实例，可选择性地绑定后置工具。
+        Creates a ChatOpenAI instance based on the configuration, with the option to bind post-tools.
         
         Args:
-            state (MainState): 当前状态对象，包含 API 配置
-            bind_post_tools (bool): 是否绑定后置工具，默认 False
+            state (MainState): Current state object, containing API config
+            bind_post_tools (bool): Whether to bind post-tools, default False
         
         Returns:
-            ChatOpenAI: 配置好的 LLM 实例
+            ChatOpenAI: Configured LLM instance
         
         Note:
-            - 模型名称优先使用 self.model_name，否则使用 state.request.model
-            - API URL 优先使用 self.chat_api_url，否则使用 state.request.chat_api_url
+            - Model name usage priority: self.model_name, then state.request.model
+            - API URL usage priority: self.chat_api_url, then state.request.chat_api_url
         """
-        # 确定实际使用的模型和 URL
+        # Determine the actual model and URL to use
         actual_model = self.model_name or state.request.model
         actual_url = self.chat_api_url or state.request.chat_api_url
         
-        log.info(f"[create_llm:]创建LLM实例，温度: {self.temperature}, "
-                 f"最大token: {self.max_tokens}, 模型: {actual_model}, "
-                 f"接口URL: {actual_url}, API Key: {state.request.api_key}")
+        log.info(f"[create_llm:] Creating LLM instance, temperature: {self.temperature}, "
+                 f"max_tokens: {self.max_tokens}, model: {actual_model}, "
+                 f"API URL: {actual_url}, API Key: {state.request.api_key}")
         
-        # 创建 LLM 实例（max_tokens 不传，使用 LangChain/接口默认值）
+        # Create LLM instance (max_tokens not passed, use LangChain/API default)
         llm = ChatOpenAI(
             openai_api_base=actual_url,
             openai_api_key=state.request.api_key,
@@ -567,40 +567,40 @@ class BaseAgent(ABC):
             temperature=self.temperature,
         )
         
-        # 绑定后置工具（如果需要）
+        # Bind post-tools if needed
         if bind_post_tools and self.tool_manager:
             post_tools = self.get_post_tools()
             if post_tools:
                 llm = llm.bind_tools(post_tools, tool_choice=self.tool_mode)
-                log.info(f"[create_llm]:为LLM绑定了 {len(post_tools)} 个后置工具: "
+                log.info(f"[create_llm]: Bound {len(post_tools)} post-tools for LLM: "
                         f"{[t.name for t in post_tools]}")
         
         return llm
     
     async def process_with_llm_for_graph(self, messages: List[BaseMessage], state: MainState) -> BaseMessage:
         """
-        图模式下的 LLM 调用
+        LLM call in Graph mode
         
-        在图执行模式下调用 LLM，会绑定后置工具以支持工具调用。
+        Calls LLM in graph execution mode, binding post-tools to support tool calls.
         
         Args:
-            messages (List[BaseMessage]): 输入消息列表
-            state (MainState): 当前状态对象
+            messages (List[BaseMessage]): Input message list
+            state (MainState): Current state object
         
         Returns:
-            BaseMessage: LLM 响应消息
+            BaseMessage: LLM response message
         
         Raises:
-            Exception: LLM 调用失败时抛出异常
+            Exception: Thrown if LLM call fails
         """
         llm = self.create_llm(state, bind_post_tools=True)
         try:
             response = await llm.ainvoke(messages)
             log.info(response)
-            log.info(f"{self.role_name} 图模式LLM调用成功")
+            log.info(f"{self.role_name} Graph mode LLM call successful")
             return response
         except Exception as e:
-            log.exception(f"{self.role_name} 图模式LLM调用失败: {e}")
+            log.exception(f"{self.role_name} Graph mode LLM call failed: {e}")
             raise
 
     # =========================================================================
@@ -609,46 +609,46 @@ class BaseAgent(ABC):
     
     async def execute_pre_tools(self, state: MainState) -> Dict[str, Any]:
         """
-        执行前置工具
+        Execute pre-tools
         
-        在 LLM 调用之前执行的工具，用于收集上下文信息。
+        Tools executed before the LLM call, used for collecting context info.
         
         Args:
-            state (MainState): 当前状态对象
+            state (MainState): Current state object
         
         Returns:
-            Dict[str, Any]: 前置工具执行结果
+            Dict[str, Any]: Pre-tool execution results
         
         Note:
-            如果未提供 tool_manager，将返回默认值。
+            If tool_manager is not provided, returns default values.
         """
-        log.info(f"开始执行 {self.role_name} 的前置工具...")
+        log.info(f"Starting execution of pre-tools for {self.role_name}...")
         
-        # 检查工具管理器
+        # Check tool manager
         if not self.tool_manager:
-            log.info("未提供工具管理器，使用默认值")
+            log.info("Tool manager not provided, using default values")
             return self.get_default_pre_tool_results()
         
-        # 执行前置工具
+        # Execute pre-tools
         results = await self.tool_manager.execute_pre_tools(self.role_name)
         
-        # 设置默认值
+        # Set default values
         defaults = self.get_default_pre_tool_results()
         for key, default_value in defaults.items():
             if key not in results or results[key] is None:
                 results[key] = default_value
                 
-        log.info(f"前置工具执行完成，获得: {list(results.keys())}")
+        log.info(f"Pre-tool execution complete, obtained: {list(results.keys())}")
         return results
     
     def get_post_tools(self) -> List[Tool]:
         """
-        获取后置工具列表
+        Get post-tool list
         
-        从工具管理器获取当前角色的后置工具，并去重。
+        Get post-tools for the current role from the tool manager and remove duplicates.
         
         Returns:
-            List[Tool]: 去重后的后置工具列表
+            List[Tool]: Deduplicated list of post-tools
         """
         if not self.tool_manager:
             return []
@@ -666,12 +666,12 @@ class BaseAgent(ABC):
     
     def get_default_pre_tool_results(self) -> Dict[str, Any]:
         """
-        获取默认前置工具结果 - 子类可重写
+        Get default pre-tool results - Can be overridden by subclasses
         
-        当没有工具管理器或前置工具未返回某些字段时，使用此默认值。
+        Used when there is no tool manager or when pre-tools fail to return certain fields.
         
         Returns:
-            Dict[str, Any]: 默认的前置工具结果
+            Dict[str, Any]: Default pre-tool results
         
         Example:
             >>> def get_default_pre_tool_results(self):
@@ -684,13 +684,13 @@ class BaseAgent(ABC):
     
     def has_tool_calls(self, message: BaseMessage) -> bool:
         """
-        检查消息是否包含工具调用
+        Check if the message contains tool calls
         
         Args:
-            message (BaseMessage): 要检查的消息
+            message (BaseMessage): Message to check
         
         Returns:
-            bool: 如果消息包含工具调用返回 True，否则返回 False
+            bool: True if the message contains tool calls, False otherwise
         """
         return hasattr(message, 'tool_calls') and bool(getattr(message, 'tool_calls', None))
 
@@ -700,53 +700,53 @@ class BaseAgent(ABC):
     
     async def process_simple_mode(self, state: MainState, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
         """
-        简单模式处理 - 单次 LLM 调用
+        Simple mode processing - Single LLM call
         
-        最基础的执行模式，直接调用 LLM 并解析结果。
+        The most basic execution mode, calls LLM directly and parses the results.
         
         Args:
-            state (MainState): 当前状态对象
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            state (MainState): Current state object
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            Dict[str, Any]: 解析后的 LLM 输出结果
+            Dict[str, Any]: Parsed LLM output result
         
-        流程：
-            1. 构建消息
-            2. 合并历史消息（如果启用）
-            3. 调用 LLM
-            4. 更新消息历史
-            5. 解析并返回结果
+        Workflow:
+            1. Build messages
+            2. Merge history messages (if enabled)
+            3. Call LLM
+            4. Update message history
+            5. Parse and return results
         """
-        log.info(f"执行 {self.role_name} 简单模式...")
+        log.info(f"Executing {self.role_name} simple mode...")
         
-        # 构建消息
+        # Build messages
         messages = self.build_messages(state, pre_tool_results)
         
-        # 消息历史管理
+        # Message history management
         if not self.ignore_history:
             history_messages = self.message_history.get_messages()
             if history_messages:
                 messages = self.message_history.merge_histories(history_messages, messages)
-                log.info(f"合并了 {len(history_messages)} 条历史消息")
+                log.info(f"Merged {len(history_messages)} history messages")
         
-        # 创建 LLM（不绑定工具）
+        # Create LLM (No tools bound)
         llm = self.create_llm(state, bind_post_tools=False)
         
         try:
-            # 调用 LLM
+            # Call LLM
             answer_msg = await llm.ainvoke(messages)
             answer_text = answer_msg.content
-            log.info(f'LLM原始输出：{answer_text}')
-            log.info("LLM调用成功，开始解析结果")
+            log.info(f'LLM Raw Output: {answer_text}')
+            log.info("LLM call successful, starting result parsing")
             
-            # 更新消息历史
+            # Update message history
             if not self.ignore_history:
                 self.message_history.add_messages([answer_msg])
-                log.info("已更新消息历史")
+                log.info("Message history updated")
                 
         except Exception as e:
-            log.exception("LLM调用失败: %s", e)
+            log.exception("LLM call failed: %s", e)
             return {"error": str(e)}
         
         return self.parse_result(answer_text)
@@ -757,45 +757,45 @@ class BaseAgent(ABC):
     
     async def process_react_mode(self, state: MainState, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
         """
-        ReAct 模式处理 - 带验证的循环调用
+        ReAct mode processing - Looping calls with verification
         
-        循环调用 LLM 直到输出通过所有验证器，或达到最大重试次数。
+        Loops LLM calls until output passes all validators, or maximum retries are reached.
         
         Args:
-            state (MainState): 当前状态对象
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            state (MainState): Current state object
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            Dict[str, Any]: 验证通过的结果，或包含错误信息的字典
+            Dict[str, Any]: Results passing verification, or a dictionary containing error info
         
-        流程：
-            1. 构建初始消息
-            2. 循环调用 LLM
-            3. 解析结果并运行验证器
-            4. 如果验证通过，返回结果
-            5. 如果验证失败，添加反馈消息并重试
-            6. 达到最大重试次数后返回错误
+        Workflow:
+            1. Build initial message
+            2. Looping LLM call
+            3. Parse results and run validators
+            4. If validation passes, return results
+            5. If validation fails, add feedback message and retry
+            6. Return error after reaching maximum retries
         """
-        log.info(f"执行 {self.role_name} ReAct模式 (最大重试: {self.react_max_retries})")
+        log.info(f"Executing {self.role_name} ReAct mode (max retries: {self.react_max_retries})")
         
-        # 构建初始消息
+        # Build initial messages
         messages = self.build_messages(state, pre_tool_results)
         
-        # 消息历史管理
+        # Message history management
         if not self.ignore_history:
             history_messages = self.message_history.get_messages()
             if history_messages:
                 messages = self.message_history.merge_histories(history_messages, messages)
-                log.info(f"合并了 {len(history_messages)} 条历史消息")
+                log.info(f"Merged {len(history_messages)} history messages")
         
-        # 创建 LLM
+        # Create LLM
         llm = self.create_llm(state, bind_post_tools=False)
         
-        # 循环调用直到验证通过或达到最大重试次数
+        # Looping calls until verification passes or maximum retries reached
         for attempt in range(self.react_max_retries + 1):
             try:
-                # 调用 LLM
-                log.info(f"ReAct尝试 {attempt + 1}/{self.react_max_retries + 1}")
+                # Call LLM
+                log.info(f"ReAct Attempt {attempt + 1}/{self.react_max_retries + 1}")
                 answer_msg = await llm.ainvoke(messages)
                 answer_text = answer_msg.content
                 log.info(f'LLM原始输出：{answer_text[:200]}...' if len(answer_text) > 200 else f'LLM原始输出：{answer_text}')
