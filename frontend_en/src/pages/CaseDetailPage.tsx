@@ -4,7 +4,7 @@ import {
   ChevronLeft, Scale, Calendar, User, Briefcase, 
   FileText, MessageSquare, ExternalLink, Download,
   Clock, Info, Shield, Hash, Send, Bot, User as UserIcon, Loader2,
-  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload, Globe, Type
+  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload, Globe, Type, MoreVertical, Trash2
 } from 'lucide-react';
 import { Case, CaseDocument } from '../types/case';
 import { apiFetch } from '../config/api';
@@ -39,6 +39,8 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
   const [introduceTextLoading, setIntroduceTextLoading] = useState(false);
   const [introduceTextError, setIntroduceTextError] = useState('');
   const [introduceTextSuccess, setIntroduceTextSuccess] = useState('');
+  const [activeMenuDocId, setActiveMenuDocId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<CaseDocument | null>(null);
   
   // Three-column layout state
   const [leftPanelWidth, setLeftPanelWidth] = useState(380);
@@ -90,6 +92,7 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
           }
 
           return {
+            id: f.id,
             name: filename,
             url: resolvedUrl,
             local_path: f.original_path,
@@ -111,6 +114,10 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
           existingPaths.add(path);
         }
       });
+
+      // SYNC CONTROL: Prune selectedFiles (remove deleted/stale records)
+      const mergedPaths = new Set(merged.map(d => d.local_path || d.url || d.name).filter(Boolean));
+      setSelectedFiles(prev => prev.filter(p => mergedPaths.has(p)));
 
       // Auto-select new documents by default
       const currentDocPaths = new Set(documents.map(d => d.local_path || d.url));
@@ -134,6 +141,50 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
       console.error('Failed to fetch documents:', err);
     } finally {
       setLoadingDocs(false);
+    }
+  };
+
+  const handleDeleteSource = async (doc: CaseDocument) => {
+    if (!doc.local_path && !doc.url && !doc.id) return;
+    
+    // Use the explicit manifest ID for vector deletion (most reliable for backend)
+    // Fallback to local_path/url/name for physical file lookup or legacy records
+    const fileId = doc.id || doc.local_path || doc.url || doc.name;
+    
+    try {
+      setSyncLoading(true);
+      // 1. Delete vectors from FAISS index and manifest
+      await apiFetch('/api/v1/kb/delete-vector', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_id: fileId,
+          notebook_id: caseItem.notebook_id,
+          email: user?.email || user?.id || 'local',
+          notebook_title: caseItem.case_title || caseItem.case_number || ''
+        }),
+      });
+
+      // 2. Delete physical file (Form data expected by backend)
+      if (doc.local_path) {
+        const formData = new FormData();
+        formData.append('storage_path', doc.local_path);
+        await apiFetch('/api/v1/kb/delete', {
+          method: 'DELETE',
+          body: formData,
+        });
+      }
+
+      // 3. Refresh list and clear selection
+      await fetchDocuments();
+      const selectionIdentifier = doc.local_path || doc.url || doc.name;
+      setSelectedFiles(prev => prev.filter(f => f !== selectionIdentifier));
+      setShowDeleteConfirm(null);
+      setActiveMenuDocId(null);
+    } catch (err) {
+      console.error('Failed to delete source:', err);
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -548,27 +599,67 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
                           </div>
                         </div>
                         
-                        {doc.status === 'available' ? (
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); handleImportDocument(doc); }}
-                             disabled={syncLoading}
-                             className="p-2 bg-[var(--accent)] text-white rounded-lg hover:shadow-glow-accent transition-all flex items-center gap-2"
-                             title="Import into AI Notebook"
-                           >
-                             {syncLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                             <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Add</span>
-                           </button>
-                        ) : (
-                          <a 
-                            href={doc.url} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="p-1.5 text-neutral-300 hover:text-accent-500 transition-colors"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Download size={14} />
-                          </a>
-                        )}
+                        {/* Action Area: Sync (Official) or Menu (Added) */}
+                        <div className="flex items-center gap-1">
+                          {doc.status === 'available' ? (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleImportDocument(doc); }}
+                              disabled={syncLoading}
+                              className="p-2 bg-[var(--accent)] text-white rounded-lg hover:shadow-glow-accent transition-all flex items-center gap-2"
+                              title="Import into AI Notebook"
+                            >
+                              {syncLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                              <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Add</span>
+                            </button>
+                          ) : (
+                            <div className="relative">
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  const id = doc.local_path || doc.url || doc.name;
+                                  setActiveMenuDocId(activeMenuDocId === id ? null : id); 
+                                }}
+                                className="p-1.5 text-neutral-300 hover:text-accent-500 hover:bg-accent-50 rounded-lg transition-all"
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+                              
+                              <AnimatePresence>
+                                {activeMenuDocId === (doc.local_path || doc.url || doc.name) && (
+                                  <motion.div 
+                                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                    className="absolute right-0 top-full mt-1 w-36 bg-white border border-neutral-100 rounded-xl shadow-xl z-50 overflow-hidden"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <a 
+                                      href={doc.url} 
+                                      target="_blank" 
+                                      rel="noreferrer"
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold text-neutral-600 hover:bg-neutral-50 transition-colors uppercase tracking-wider"
+                                      onClick={() => setActiveMenuDocId(null)}
+                                    >
+                                      <Download size={12} />
+                                      Download
+                                    </a>
+                                    
+                                    {/* Only show delete for non-official sources as requested */}
+                                    {doc.type !== 'order' && doc.type !== 'cause_list' && (
+                                      <button 
+                                        onClick={() => setShowDeleteConfirm(doc)}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold text-red-600 hover:bg-red-50 transition-colors uppercase tracking-wider border-t border-neutral-50"
+                                      >
+                                        <Trash2 size={12} />
+                                        Delete
+                                      </button>
+                                    )}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                 ))}
@@ -583,6 +674,50 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
             )}
           </div>
         </aside>
+
+        {/* Global Delete Confirmation Dialog */}
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                onClick={() => setShowDeleteConfirm(null)}
+              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="relative w-full max-w-sm bg-white rounded-3xl p-8 shadow-2xl"
+              >
+                <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Trash2 size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-center text-neutral-900 mb-2">Delete Source?</h3>
+                <p className="text-sm text-neutral-500 text-center mb-8">
+                  This will permanently remove <span className="font-bold text-neutral-700">{showDeleteConfirm.name}</span> from your notebook and the Counsel AI index.
+                </p>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowDeleteConfirm(null)}
+                    className="flex-1 py-3 px-4 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-400 hover:bg-neutral-50 transition-all"
+                  >
+                    CANCEL
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteSource(showDeleteConfirm)}
+                    disabled={syncLoading}
+                    className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2"
+                  >
+                    {syncLoading ? <Loader2 size={16} className="animate-spin" /> : 'DELETE'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Resizer Left */}
         <div 

@@ -28,6 +28,7 @@ export interface Case {
 }
 
 export interface CaseDocument {
+  id?: string;
   name: string;
   path?: string;
   local_path?: string;
