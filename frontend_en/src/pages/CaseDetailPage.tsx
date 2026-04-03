@@ -470,10 +470,27 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
             </div>
 
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
-                <FileText size={14} />
-                Order Chronology
-              </h2>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-neutral-300 text-[var(--accent)] focus:ring-[var(--accent)] bg-[var(--surface)] transition-all cursor-pointer"
+                  checked={selectedFiles.length === documents.filter(d => d.status !== 'available').length && documents.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      const allReadyIds = documents
+                        .filter(d => d.status !== 'available')
+                        .map(d => d.local_path || d.url || d.name)
+                        .filter(Boolean) as string[];
+                      setSelectedFiles(allReadyIds);
+                    } else {
+                      setSelectedFiles([]);
+                    }
+                  }}
+                />
+                <h2 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
+                  {selectedFiles.length > 0 ? `Selected ${selectedFiles.length} ` : 'Order Chronology'}
+                </h2>
+              </div>
               <span className="text-[10px] font-bold bg-neutral-100 text-neutral-500 px-2 py-0.5 rounded-full">
                 {documents.length} Files
               </span>
@@ -620,20 +637,25 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
               </div>
               <input 
                 type="text"
-                placeholder="Ask Counsel AI about this case file..."
-                className="w-full bg-[var(--surface-high)] border border-[var(--border)] rounded-2xl px-6 py-4 pr-16 text-sm focus:ring-2 focus:ring-[var(--accent)]/20 focus:border-[var(--accent)] outline-none transition-all shadow-sm text-[var(--text-primary)]"
+                placeholder={selectedFiles.length > 0 ? "Ask Counsel AI about this case file..." : "Please select files for context..."}
+                className="w-full bg-[var(--surface-high)] border border-[var(--border)] rounded-2xl px-6 py-4 pr-32 text-sm focus:ring-2 focus:ring-[var(--accent)]/20 focus:border-[var(--accent)] outline-none transition-all shadow-sm text-[var(--text-primary)]"
                 value={inputMsg}
                 onChange={e => setInputMsg(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                disabled={isChatLoading}
+                disabled={isChatLoading || selectedFiles.length === 0}
               />
-              <button 
-                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all ${inputMsg.trim() ? 'bg-[var(--accent)] text-white shadow-glow-accent' : 'bg-neutral-200 text-neutral-400'}`}
-                onClick={handleSendMessage}
-                disabled={!inputMsg.trim() || isChatLoading}
-              >
-                <Send size={18} />
-              </button>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                <span className="hidden sm:inline text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest leading-none">
+                  {selectedFiles.length} sources
+                </span>
+                <button 
+                  className={`p-2 rounded-xl transition-all ${inputMsg.trim() && selectedFiles.length > 0 ? 'bg-[var(--accent)] text-white shadow-glow-accent' : 'bg-neutral-200 text-neutral-400 opacity-50 cursor-not-allowed'}`}
+                  onClick={handleSendMessage}
+                  disabled={!inputMsg.trim() || isChatLoading || selectedFiles.length === 0}
+                >
+                  <Send size={18} />
+                </button>
+              </div>
             </div>
           </div>
         </main>
