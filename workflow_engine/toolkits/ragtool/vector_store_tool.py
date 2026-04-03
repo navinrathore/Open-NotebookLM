@@ -121,13 +121,15 @@ class VectorStoreManager:
         
         # Paths
         self.manifest_path = self.base_dir / "knowledge_manifest.json"
-        self.faiss_index_path = self.vector_store_dir / f"{project_name}.index"
-        self.faiss_meta_path = self.vector_store_dir / f"{project_name}.meta"
+        self.faiss_index_path = self.vector_store_dir / "knowledge_base.index"
+        self.faiss_meta_path = self.vector_store_dir / "knowledge_base.meta"
+        self.bm25_index_path = self.vector_store_dir / "knowledge_base.bm25"
         
         # State
         self.manifest = self._load_manifest()
         self.index = None
         self.meta_data = [] # List corresponding to index vectors
+        self.bm25 = None    # BM25Okapi instance
         self._chunk_map = {} # {file_id: {chunk_index: content}} for context lookup
         
         # Reranking configuration (Lazy loaded Cross-Encoder)
@@ -155,6 +157,7 @@ class VectorStoreManager:
             with open(self.faiss_meta_path, 'rb') as f:
                 self.meta_data = pickle.load(f)
             self._build_chunk_map()
+            self._load_bm25()
         else:
             log.info("Initializing new index")
             self.index = None # Will be initialized on first add
@@ -184,7 +187,47 @@ class VectorStoreManager:
             with open(self.faiss_meta_path, 'wb') as f:
                 pickle.dump(self.meta_data, f)
         
+        # Save BM25
+        if self.bm25 is not None:
+            with open(self.bm25_index_path, 'wb') as f:
+                pickle.dump(self.bm25, f)
+        
         log.info(f"Saved vector store to {self.vector_store_dir}")
+
+    def _load_bm25(self):
+        """Loads the BM25 index from disk if it exists."""
+        if self.bm25_index_path.exists():
+            try:
+                with open(self.bm25_index_path, 'rb') as f:
+                    self.bm25 = pickle.load(f)
+            except Exception as e:
+                log.warning(f"Failed to load BM25 index: {e}")
+                self.bm25 = None
+        else:
+            self._build_bm25_index()
+
+    def _build_bm25_index(self):
+        """Builds a new BM25 index from current text chunks."""
+        if not self.meta_data:
+            self.bm25 = None
+            return
+
+        try:
+            from rank_bm25 import BM25Okapi
+            # Simple whitespace/punctuation tokenizer for English legal text
+            tokenized_corpus = [
+                self._tokenize(meta.get("content", "")) 
+                for meta in self.meta_data
+            ]
+            self.bm25 = BM25Okapi(tokenized_corpus)
+            log.info(f"Built BM25 index with {len(tokenized_corpus)} documents")
+        except Exception as e:
+            log.error(f"Failed to build BM25 index: {e}")
+            self.bm25 = None
+
+    def _tokenize(self, text: str) -> List[str]:
+        """Simple tokenizer for BM25: lowercase and split by non-alphanumeric."""
+        return re.findall(r'\w+', text.lower())
 
     def remove_file(self, file_id: str) -> bool:
         """
@@ -207,7 +250,6 @@ class VectorStoreManager:
             return True
         dim = self.index.d
         # Rebuild index: keep only vectors not belonging to file_id
-        batch_size = 256
         new_meta = [self.meta_data[i] for i in keep_indices]
         vectors_list = []
         for i in keep_indices:
@@ -228,11 +270,12 @@ class VectorStoreManager:
         self.manifest["files"] = [f for f in self.manifest.get("files", []) if f.get("id") != file_id]
         self.save()
         self._build_chunk_map()
+        self._build_bm25_index()
         return True
 
-    def search(self, query: str, top_k: int = 5, file_ids: Optional[List[str]] = None, include_context: bool = False, window_size: int = 1) -> List[Dict]:
+    def search(self, query: str, top_k: int = 5, file_ids: Optional[List[str]] = None, include_context: bool = False, window_size: int = 1, use_hybrid: bool = False) -> List[Dict]:
         """
-        Search knowledge base.
+        Search knowledge base using Vector (Dense) and optionally BM25 (Sparse) retrieval.
         
         Args:
             query: Query string.
@@ -240,79 +283,144 @@ class VectorStoreManager:
             file_ids: List of file IDs to filter by.
             include_context: Whether to retrieve adjacent chunks for each result.
             window_size: Number of chunks before and after to retrieve.
+            use_hybrid: Whether to combine Vector search with BM25 keyword search.
         """
         if self.index is None or self.index.ntotal == 0:
             return []
 
+        # 1. Hybrid Path (Reciprocal Rank Fusion)
+        if use_hybrid and self.bm25:
+            vector_results = self._search_vector(query, top_k=top_k*2, file_ids=file_ids)
+            bm25_results = self._search_bm25(query, top_k=top_k*2, file_ids=file_ids)
+            
+            # Merge using Reciprocal Rank Fusion (RRF)
+            combined_results = self._reciprocal_rank_fusion(vector_results, bm25_results, top_k=top_k)
+        else:
+            # Standard Vector Search
+            combined_results = self._search_vector(query, top_k=top_k, file_ids=file_ids)
+
+        # 2. Add Context if requested
+        if include_context:
+            for res in combined_results:
+                fid = res.get("source_file_id")
+                idx = res.get("metadata", {}).get("chunk_index")
+                if fid and idx is not None and fid in self._chunk_map:
+                    context_chunks = []
+                    for i in range(idx - window_size, idx + window_size + 1):
+                        content = self._chunk_map[fid].get(i)
+                        if content:
+                            context_chunks.append(content)
+                    if context_chunks:
+                        res["context_content"] = "\n[...]\n".join(context_chunks)
+                    else:
+                        res["context_content"] = res.get("content")
+                else:
+                    res["context_content"] = res.get("content")
+
+        return combined_results
+
+    def _search_vector(self, query: str, top_k: int = 5, file_ids: Optional[List[str]] = None) -> List[Dict]:
+        """Core FAISS vector search implementation."""
         # 1. Embed query
         query_vecs = self._call_embedding_api([query])
         if query_vecs is None or len(query_vecs) == 0:
             return []
             
         # 2. Determine search k (expand if filtering)
-        # If filtering by file_ids, we need to retrieve more candidates
-        # because many might belong to other files.
         search_k = top_k
         if file_ids:
-            # Simple heuristic: fetch more candidates. 
-            # In production, might need to be much larger or use iterative search.
             search_k = max(top_k * 20, 100) 
-            
-        # Cap at total vectors
         search_k = min(search_k, self.index.ntotal)
             
         # 3. Search Faiss
-        # D: distances (scores), I: indices
         D, I = self.index.search(query_vecs, search_k)
         
         # 4. Filter and Format Results
         results = []
         target_file_ids = set(file_ids) if file_ids else None
         
-        # I[0] contains indices for the first (and only) query
         for rank, idx in enumerate(I[0]):
             if idx < 0 or idx >= len(self.meta_data):
                 continue
-                
             meta = self.meta_data[idx]
-            
-            # Post-filtering
             if target_file_ids and meta.get("source_file_id") not in target_file_ids:
                 continue
-                
-            result_item = {
+            
+            results.append({
                 "score": float(D[0][rank]),
                 "content": meta.get("content"),
                 "source_file_id": meta.get("source_file_id"),
                 "type": meta.get("type"),
                 "metadata": meta
-            }
-
-            if include_context:
-                fid = meta.get("source_file_id")
-                idx = meta.get("chunk_index")
-                if fid and idx is not None and fid in self._chunk_map:
-                    context_chunks = []
-                    # Get range [idx - window_size, idx + window_size]
-                    for i in range(idx - window_size, idx + window_size + 1):
-                        content = self._chunk_map[fid].get(i)
-                        if content:
-                            context_chunks.append(content)
-                    
-                    if context_chunks:
-                        # Join with separators to indicate boundaries
-                        result_item["context_content"] = "\n[...]\n".join(context_chunks)
-                    else:
-                        result_item["context_content"] = meta.get("content")
-                else:
-                    result_item["context_content"] = meta.get("content")
-
-            results.append(result_item)
-            
+            })
             if len(results) >= top_k:
                 break
-                
         return results
+
+    def _search_bm25(self, query: str, top_k: int = 5, file_ids: Optional[List[str]] = None) -> List[Dict]:
+        """Keyword-based BM25 search implementation."""
+        if not self.bm25:
+            return []
+            
+        tokenized_query = self._tokenize(query)
+        # BM25 scores for all documents in the corpus
+        scores = self.bm25.get_scores(tokenized_query)
+        
+        # Get top indices
+        top_indices = np.argsort(scores)[::-1]
+        
+        results = []
+        target_file_ids = set(file_ids) if file_ids else None
+        
+        for idx in top_indices:
+            if scores[idx] <= 0: # Stop if no keyword matches
+                break
+            meta = self.meta_data[idx]
+            if target_file_ids and meta.get("source_file_id") not in target_file_ids:
+                continue
+                
+            results.append({
+                "bm25_score": float(scores[idx]),
+                "content": meta.get("content"),
+                "source_file_id": meta.get("source_file_id"),
+                "type": meta.get("type"),
+                "metadata": meta
+            })
+            if len(results) >= top_k:
+                break
+        return results
+
+    def _reciprocal_rank_fusion(self, vector_results: List[Dict], bm25_results: List[Dict], top_k: int = 5, k: int = 60) -> List[Dict]:
+        """
+        Merge results from Vector search and BM25 search using Reciprocal Rank Fusion.
+        RRF Score = Sum(1 / (k + rank))
+        """
+        fused_scores = {} # {chunk_content_hash: score}
+        doc_map = {}      # mapping hash to the original result object
+        
+        # Process Vector Results
+        for rank, res in enumerate(vector_results):
+            doc_id = res.get("content") # Use content as unique ID for fusion
+            fused_scores[doc_id] = fused_scores.get(doc_id, 0) + 1.0 / (k + rank + 1)
+            doc_map[doc_id] = res
+            
+        # Process BM25 Results
+        for rank, res in enumerate(bm25_results):
+            doc_id = res.get("content")
+            fused_scores[doc_id] = fused_scores.get(doc_id, 0) + 1.0 / (k + rank + 1)
+            if doc_id not in doc_map:
+                doc_map[doc_id] = res
+                
+        # Sort by fused score
+        sorted_ids = sorted(fused_scores.keys(), key=lambda x: fused_scores[x], reverse=True)
+        
+        final_results = []
+        for doc_id in sorted_ids[:top_k]:
+            res = doc_map[doc_id]
+            res["rrf_score"] = fused_scores[doc_id]
+            final_results.append(res)
+            
+        return final_results
 
     def rerank(self, query: str, results: List[Dict], top_n: int = 5) -> List[Dict]:
         """

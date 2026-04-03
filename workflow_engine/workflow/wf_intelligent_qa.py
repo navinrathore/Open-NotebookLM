@@ -30,11 +30,11 @@ RAG_SIMILARITY_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.3"))
 # RAG_CONTEXT_WINDOW_SIZE: Number of adjacent chunks (prev/next) to retrieve for each hit.
 RAG_CONTEXT_WINDOW_SIZE = int(os.getenv("RAG_CONTEXT_WINDOW_SIZE", "1"))
 
-# USE_RERANKER: Toggle for the high-precision Cross-Encoder reranking stage.
-USE_RERANKER = os.getenv("USE_RERANKER", "1") == "1"
-
 # RAG_RERANK_TOP_N: Final number of results to keep after reranking.
 RAG_RERANK_TOP_N = int(os.getenv("RAG_RERANK_TOP_N", "5"))
+
+# USE_HYBRID_SEARCH: Toggle for combining Vector search and BM25 search.
+USE_HYBRID_SEARCH = os.getenv("USE_HYBRID_SEARCH", "1") == "1"
 
 MAX_HISTORY_TURNS = 10
 SOURCE_PREVIEW_CHARS = 100
@@ -327,10 +327,11 @@ def try_rag_retrieve(state: IntelligentQAState) -> None:
 
         results = manager.search(
             query=state.request.query,
-            top_k=RAG_TOP_K,
+            top_k=RAG_TOP_K if not USE_HYBRID_SEARCH else RAG_TOP_K, 
             file_ids=file_ids,
             include_context=(RAG_CONTEXT_WINDOW_SIZE > 0),
-            window_size=RAG_CONTEXT_WINDOW_SIZE
+            window_size=RAG_CONTEXT_WINDOW_SIZE,
+            use_hybrid=USE_HYBRID_SEARCH
         )
         
         # Filter results by Similarity Threshold (Roadmap #4)
