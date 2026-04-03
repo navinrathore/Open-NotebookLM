@@ -8,8 +8,10 @@ import httpx
 import numpy as np
 import faiss
 import asyncio
+import re
+from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Tuple
 
 import fitz  # PyMuPDF, fallback for when MinerU fails
 from PIL import Image
@@ -218,6 +220,118 @@ class VectorStoreManager:
             "storage_dir": str(self.vector_store_dir)
         }
 
+    def _extract_metadata_from_filename(self, filename: str) -> Dict[str, Any]:
+        """
+        Extracts legal hierarchy and date metadata from the filename using heuristics.
+        
+        Prioritizes:
+        1. Legal Source: SCI (Highest) > NGT (High) > Generic (Normal)
+        2. Status: Final/Review (Boosted) > Normal
+        3. Date: Extracts YYYY-MM-DD or DD-MM-YYYY if present.
+        
+        Returns:
+            Dict containing 'hierarchy', 'is_final', and 'extracted_date'.
+        """
+        filename_lower = filename.lower()
+        metadata = {
+            "hierarchy": "generic", # Values: sci, ngt, generic
+            "is_final": False,       # True if 'final' or 'review' is present
+            "doc_date": None,        # datetime object
+            "date_source": None      # 'filename' or 'mtime'
+        }
+        
+        # 1. Determine Hierarchy (SCI is supreme)
+        if "sci" in filename_lower or "supreme court" in filename_lower:
+            metadata["hierarchy"] = "sci"
+        elif "ngt" in filename_lower or "green tribunal" in filename_lower:
+            metadata["hierarchy"] = "ngt"
+            
+        # 2. Determine Authority Level
+        if any(keyword in filename_lower for keyword in ["final", "review", "judgment", "verdict"]):
+            metadata["is_final"] = True
+            
+        # 3. Extract Date (Heuristic: YYYY-MM-DD, DD-MM-YYYY, or variations)
+        # Matches 2023-12-31 or 31-12-2023 or dots/slashes
+        date_pattern = r"(\d{2,4})[-\.\/](\d{2})[-\.\/](\d{2,4})"
+        match = re.search(date_pattern, filename)
+        if match:
+            try:
+                g1, g2, g3 = match.groups()
+                if len(g1) == 4: # YYYY-MM-DD
+                    metadata["doc_date"] = datetime(int(g1), int(g2), int(g3))
+                else: # DD-MM-YYYY
+                    metadata["doc_date"] = datetime(int(g3), int(g2), int(g1))
+                metadata["date_source"] = "filename"
+            except (ValueError, IndexError):
+                pass
+                
+        return metadata
+
+    def _apply_prioritization_boost(self, hits: List[Dict]) -> List[Dict]:
+        """
+        Adjusts the search scores based on authoritative metadata and recency.
+        
+        Weights applied (configurable via .env):
+        - SCI: RAG_PRIORITY_SCI_WEIGHT
+        - NGT: RAG_PRIORITY_NGT_WEIGHT
+        - Final/Review: RAG_PRIORITY_AUTHORITY_WEIGHT
+        - Recency: RAG_PRIORITY_RECENCY_WEIGHT (Scales by doc year)
+        
+        Returns:
+            Boosted list of hits, re-sorted by new scores.
+        """
+        if not hits:
+            return hits
+            
+        sci_w = float(os.getenv("RAG_PRIORITY_SCI_WEIGHT", "2.0"))
+        ngt_w = float(os.getenv("RAG_PRIORITY_NGT_WEIGHT", "1.5"))
+        auth_w = float(os.getenv("RAG_PRIORITY_AUTHORITY_WEIGHT", "1.3"))
+        recency_w = float(os.getenv("RAG_PRIORITY_RECENCY_WEIGHT", "1.2"))
+        
+        current_year = datetime.now().year
+        
+        for hit in hits:
+            meta = hit.get("metadata", {})
+            score = hit.get("score", 0.0)
+            boost = 1.0
+            
+            # --- Hierarchy Boost ---
+            hierarchy = meta.get("hierarchy", "generic")
+            if hierarchy == "sci":
+                boost *= sci_w
+            elif hierarchy == "ngt":
+                boost *= ngt_w
+                
+            # --- Authority Boost (Final/Review) ---
+            if meta.get("is_final"):
+                boost *= auth_w
+                
+            # --- Recency Boost ---
+            doc_date_str = meta.get("doc_date")
+            if doc_date_str:
+                try:
+                    # Metadata store dates as strings if came from JSON, 
+                    # parse it back if necessary but usually it's passed directly if internal.
+                    if isinstance(doc_date_str, str):
+                        doc_year = datetime.fromisoformat(doc_date_str).year
+                    else:
+                        doc_year = doc_date_str.year
+                        
+                    # Simpler recency: if file is from current or last year, apply full recency boost
+                    if doc_year >= (current_year - 1):
+                        boost *= recency_w
+                    elif doc_year >= (current_year - 5):
+                        # Partial boost for recent-ish files
+                        boost *= (1.0 + (recency_w - 1.0) / 2)
+                except (ValueError, AttributeError):
+                    pass
+            
+            hit["score"] = score * boost
+            hit["priority_boost"] = boost # For transparency in logs
+            
+        # Re-sort based on boosted scores
+        return sorted(hits, key=lambda x: x["score"], reverse=True)
+
     def _load_index(self):
         if self.faiss_index_path.exists() and self.faiss_meta_path.exists():
             log.info(f"Loading existing index from {self.faiss_index_path}")
@@ -362,14 +476,18 @@ class VectorStoreManager:
             bm25_results = self._search_bm25(query, top_k=top_k*2, file_ids=file_ids)
             
             # Merge using Reciprocal Rank Fusion (RRF)
-            combined_results = self._reciprocal_rank_fusion(vector_results, bm25_results, top_k=top_k)
+            results = self._reciprocal_rank_fusion(vector_results, bm25_results, top_k=top_k)
         else:
             # Standard Vector Search
-            combined_results = self._search_vector(query, top_k=top_k, file_ids=file_ids)
+            results = self._search_vector(query, top_k=top_k, file_ids=file_ids)
+        
+        # --- Authoritative Prioritization ---
+        # Apply metadata-based boosts after search but before returning/filtering
+        results = self._apply_prioritization_boost(results)
 
         # 2. Add Context if requested
         if include_context:
-            for res in combined_results:
+            for res in results:
                 fid = res.get("source_file_id")
                 idx = res.get("metadata", {}).get("chunk_index")
                 if fid and idx is not None and fid in self._chunk_map:
@@ -661,13 +779,28 @@ class VectorStoreManager:
             file_id = str(uuid.uuid4())
         ext = file_path.suffix.lower()
         
+        # --- Metadata Prioritization (Roadmap #6) ---
+        # Extract legal hierarchy and dates early to embed them into metadata
+        prio_meta = self._extract_metadata_from_filename(file_path.name)
+        
+        # Fallback to mtime if no filename date was found (with lower weight later)
+        if not prio_meta["doc_date"]:
+            mtime = file_path.stat().st_mtime
+            prio_meta["doc_date"] = datetime.fromtimestamp(mtime)
+            prio_meta["date_source"] = "mtime"
+            
         file_record = {
             "id": file_id,
             "original_path": str(file_path),
             "file_type": ext.lstrip('.'),
             "status": "processing",
             "chunks_count": 0,
-            "media_desc_count": 0
+            "media_desc_count": 0,
+            # Prioritization fields
+            "hierarchy": prio_meta["hierarchy"],
+            "is_final": prio_meta["is_final"],
+            "doc_date": prio_meta["doc_date"].isoformat() if prio_meta["doc_date"] else None,
+            "date_source": prio_meta["date_source"]
         }
         
         log.info(f"Processing file: {file_path} (ID: {file_id})")
