@@ -302,8 +302,18 @@ def try_rag_retrieve(state: IntelligentQAState) -> None:
     try:
         from workflow_engine.toolkits.ragtool.vector_store_tool import VectorStoreManager
         manager = VectorStoreManager(base_dir=base_dir)
+        
+        # --- Physical Index Verification (Roadmap #4) ---
+        # Before searching, we perform a 'Lite-Check' to ensure the binary files
+        # (FAISS index, metadata, BM25) are actually present and healthy.
+        health = manager.verify_health()
+        if not health["is_healthy"]:
+            log.warning(f"[_try_rag_retrieve] Retrieval Guard triggered: Index is unhealthy. {health['missing_files']}")
+            state.error = f"Physical index files missing or empty: {health['missing_files']}. Please click re-index."
+            return
+
         if manager.index is None or manager.index.ntotal == 0:
-            log.warning(f"[_try_rag_retrieve] Skipped: index is empty (ntotal={manager.index.ntotal if manager.index else 0})")
+            log.warning(f"[_try_rag_retrieve] Skipped: Index is logically empty (ntotal=0).")
             return
 
         manifest_files = manager.manifest.get("files", []) or []

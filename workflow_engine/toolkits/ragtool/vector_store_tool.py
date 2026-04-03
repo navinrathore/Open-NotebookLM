@@ -132,11 +132,18 @@ class VectorStoreManager:
         self.bm25 = None    # BM25Okapi instance
         self._chunk_map = {} # {file_id: {chunk_index: content}} for context lookup
         
-        # Reranking configuration (Lazy loaded Cross-Encoder)
         self.reranker_model = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
         self._reranker_instance = None
         
         self._load_index()
+        
+        # Initial health check on startup
+        strict_mode = os.getenv("RAG_STRICT_HEALTH_CHECK", "0") == "1"
+        health = self.verify_health(strict=strict_mode)
+        if not health["is_healthy"]:
+            log.warning(f"VectorStore [{self.project_name}] status: UNHEALTHY. Issues: {health['missing_files']}")
+        else:
+            log.info(f"VectorStore [{self.project_name}] status: HEALTHY (Verified {len(self.manifest.get('files', []))} files).")
 
     def _load_manifest(self) -> Dict[str, Any]:
         if self.manifest_path.exists():
@@ -148,6 +155,67 @@ class VectorStoreManager:
             "faiss_index_path": str(self.faiss_index_path),
             "faiss_meta_path": str(self.faiss_meta_path),
             "files": []
+        }
+
+    def verify_health(self, strict: bool = False) -> Dict[str, Any]:
+        """
+        Performs a 'Lite-Check' or 'Strict-Check' on the physical stored index files.
+        
+        Args:
+            strict: If True, also performs logical consistency checks by loading 
+                    metadata and comparing counts (takes ~50ms instead of <1ms).
+        
+        Returns:
+            A dictionary containing health details and missing file lists.
+        """
+        missing_files = []
+        is_healthy = True
+        
+        # 1. Simple existence checks (Lite-Check)
+        if not self.manifest_path.exists():
+            missing_files.append("knowledge_manifest.json")
+            is_healthy = False
+            
+        has_files = len(self.manifest.get("files", [])) > 0
+        if has_files:
+            if not self.faiss_index_path.exists():
+                missing_files.append("knowledge_base.index")
+                is_healthy = False
+            elif self.faiss_index_path.stat().st_size == 0:
+                missing_files.append("knowledge_base.index (EMPTY)")
+                is_healthy = False
+                
+            if not self.faiss_meta_path.exists():
+                missing_files.append("knowledge_base.meta")
+                is_healthy = False
+                
+            if os.getenv("USE_HYBRID_SEARCH", "1") == "1":
+                if not self.bm25_index_path.exists():
+                    missing_files.append("knowledge_base.bm25")
+                    is_healthy = False
+
+        # 2. Logical consistency checks (Strict-Check)
+        # This catches 'Stale' or 'Corrupted' indexes where files exist but data is mismatched.
+        if is_healthy and strict and has_files:
+            try:
+                # Check if Vector Count matches Metadata Count
+                vector_count = self.index.ntotal if self.index else 0
+                meta_count = len(self.meta_data)
+                
+                if vector_count != meta_count:
+                    missing_files.append(f"Logic Mismatch: {vector_count} vectors vs {meta_count} meta-records")
+                    is_healthy = False
+            except Exception as e:
+                missing_files.append(f"Strict Validation Error: {str(e)}")
+                is_healthy = False
+        
+        return {
+            "is_healthy": is_healthy,
+            "missing_files": missing_files,
+            "can_repair": is_healthy == False and self.manifest_path.exists(),
+            "suggestion": "Click 'Repair Index' or 'Re-index' to rebuild your search data." if not is_healthy else "Healthy",
+            "file_count": len(self.manifest.get("files", [])),
+            "storage_dir": str(self.vector_store_dir)
         }
 
     def _load_index(self):

@@ -267,20 +267,38 @@ async def list_kb_files(
 
         manifest_path = vector_store_dir / "knowledge_manifest.json"
         if manifest_path.exists():
-            import json
+            mgr = VectorStoreManager(base_dir=vector_store_dir.parent)
+            # Use Strict Mode if configured in .env
+            strict = os.getenv("RAG_STRICT_HEALTH_CHECK", "0") == "1"
+            health = mgr.verify_health(strict=strict)
+            
             with open(manifest_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                data["health_report"] = health
+                data["is_healthy"] = health["is_healthy"]
+                # Provide a direct repair endpoint for the UI
+                data["repair_url"] = "/kb/reindex"
+                data["repair_payload"] = {"notebook_id": notebook_id or "local", "email": email or "local"}
+                return data
 
         # Fallback: try legacy path if new layout has no manifest
         if notebook_id:
             legacy_dir = _vector_store_dir(email, notebook_id)
             legacy_manifest = legacy_dir / "knowledge_manifest.json"
             if legacy_manifest.exists():
-                import json
+                mgr = VectorStoreManager(base_dir=legacy_dir.parent)
+                strict = os.getenv("RAG_STRICT_HEALTH_CHECK", "0") == "1"
+                health = mgr.verify_health(strict=strict)
+                
                 with open(legacy_manifest, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    data["health_report"] = health
+                    data["is_healthy"] = health["is_healthy"]
+                    data["repair_url"] = "/kb/reindex"
+                    data["repair_payload"] = {"notebook_id": notebook_id, "email": email or "local"}
+                    return data
 
-        return {"project_name": "kb_project", "files": []}
+        return {"project_name": "kb_project", "files": [], "is_healthy": False, "health_report": {"is_healthy": False, "missing_files": ["manifest missing"]}}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
