@@ -129,6 +129,11 @@ class VectorStoreManager:
         self.index = None
         self.meta_data = [] # List corresponding to index vectors
         self._chunk_map = {} # {file_id: {chunk_index: content}} for context lookup
+        
+        # Reranking configuration (Lazy loaded Cross-Encoder)
+        self.reranker_model = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+        self._reranker_instance = None
+        
         self._load_index()
 
     def _load_manifest(self) -> Dict[str, Any]:
@@ -308,6 +313,57 @@ class VectorStoreManager:
                 break
                 
         return results
+
+    def rerank(self, query: str, results: List[Dict], top_n: int = 5) -> List[Dict]:
+        """
+        Re-scores and re-ranks retrieval results using a Cross-Encoder model.
+        Cross-Encoders are much more accurate than Bi-Encoders because they look at 
+        the query and document text simultaneously.
+        
+        Args:
+            query: The user's original natural language query.
+            results: A list of dictionaries returned by the initial FAISS search.
+            top_n: The number of top results to return after reranking.
+        """
+        if not results or top_n <= 0:
+            return results[:top_n] if top_n > 0 else results
+
+        # 1. Lazy-load the Cross-Encoder model to conserve memory until needed
+        if self._reranker_instance is None:
+            try:
+                from sentence_transformers import CrossEncoder
+                log.info(f"Initializing Reranker Model: {self.reranker_model} on {self.embedding_device}")
+                # We use the same hardware device (cpu/gpu/mps) as the embedding model
+                self._reranker_instance = CrossEncoder(self.reranker_model, device=self.embedding_device)
+            except Exception as e:
+                log.error(f"Failed to load Reranker model: {e}")
+                return results[:top_n]
+
+        # 2. Prepare pairs for scoring: [(query, chunk1), (query, chunk2), ...]
+        # NOTE: We use the context_content if available, as it provides more semantic depth
+        sentence_pairs = []
+        for res in results:
+            text = res.get("context_content") or res.get("content") or ""
+            sentence_pairs.append([query, text])
+
+        # 3. Perform batch inference
+        try:
+            # CrossEncoder returns higher scores for better matches
+            scores = self._reranker_instance.predict(sentence_pairs)
+            
+            # 4. Attach new scores to results and re-sort
+            for i, score in enumerate(scores):
+                results[i]["rerank_score"] = float(score)
+            
+            # Sort by rerank_score in descending order (highest score first)
+            reranked_results = sorted(results, key=lambda x: x.get("rerank_score", 0), reverse=True)
+            
+            log.info(f"Reranking complete for {len(results)} items. Top candidate score: {reranked_results[0].get('rerank_score'):.4f}")
+            return reranked_results[:top_n]
+            
+        except Exception as e:
+            log.warning(f"Reranking failed during prediction: {e}")
+            return results[:top_n]
 
     def _call_embedding_api(self, texts: List[str]) -> np.ndarray:
         """

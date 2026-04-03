@@ -16,11 +16,26 @@ from workflow_engine.promptstemplates.resources.pt_qa_agent_repo import QaAgent 
 
 log = get_logger(__name__)
 
-# 文档上下文长度限制（字符数）
+# --- RAG Retrieval Configuration ---
+# MAX_DOC_CONTEXT_CHARS: Maximum characters of document context to include in the LLM prompt.
 MAX_DOC_CONTEXT_CHARS = int(os.getenv("MAX_DOC_CONTEXT_CHARS", "48000"))
+
+# RAG_TOP_K: Initial retrieval depth (Bi-Encoder). 
+# If Reranking is enabled, this acts as the candidate pool size (e.g., 30).
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "15"))
+
+# RAG_SIMILARITY_THRESHOLD: Minimum cosine similarity score required for a fragment to be considered.
 RAG_SIMILARITY_THRESHOLD = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.3"))
+
+# RAG_CONTEXT_WINDOW_SIZE: Number of adjacent chunks (prev/next) to retrieve for each hit.
 RAG_CONTEXT_WINDOW_SIZE = int(os.getenv("RAG_CONTEXT_WINDOW_SIZE", "1"))
+
+# USE_RERANKER: Toggle for the high-precision Cross-Encoder reranking stage.
+USE_RERANKER = os.getenv("USE_RERANKER", "1") == "1"
+
+# RAG_RERANK_TOP_N: Final number of results to keep after reranking.
+RAG_RERANK_TOP_N = int(os.getenv("RAG_RERANK_TOP_N", "5"))
+
 MAX_HISTORY_TURNS = 10
 SOURCE_PREVIEW_CHARS = 100
 
@@ -318,13 +333,25 @@ def try_rag_retrieve(state: IntelligentQAState) -> None:
             window_size=RAG_CONTEXT_WINDOW_SIZE
         )
         
-        # Apply Similarity Threshold Filtering (Roadmap #4)
+        # Filter results by Similarity Threshold (Roadmap #4)
         filtered_results = [item for item in results if (item.get("score") or 0) >= RAG_SIMILARITY_THRESHOLD]
         
-        state.retrieved_chunks = filtered_results
-        log.info(f"RAG 检索到 {len(results)} 个片段, 过滤后剩余 {len(filtered_results)} 个 (Threshold: {RAG_SIMILARITY_THRESHOLD}, Window: {RAG_CONTEXT_WINDOW_SIZE})")
+        # Second-Stage Reranking (Roadmap #1)
+        # If enabled, we pass our candidate pool to the Cross-Encoder for precise re-scoring
+        if USE_RERANKER and filtered_results:
+            log.info(f"Reranking {len(filtered_results)} candidates down to Top-{RAG_RERANK_TOP_N}...")
+            final_results = manager.rerank(
+                query=state.request.query,
+                results=filtered_results,
+                top_n=RAG_RERANK_TOP_N
+            )
+        else:
+            final_results = filtered_results[:RAG_RERANK_TOP_N] if USE_RERANKER else filtered_results
+            
+        state.retrieved_chunks = final_results
+        log.info(f"RAG: Found {len(results)} chunks -> {len(filtered_results)} passed threshold -> {len(state.retrieved_chunks)} final selection (Rerank: {USE_RERANKER})")
     except Exception as e:
-        log.warning(f"RAG 检索跳过: {e}")
+        log.warning(f"RAG retrieval failed/skipped: {e}")
         state.retrieved_chunks = []
 
 
