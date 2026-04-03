@@ -7,7 +7,7 @@ log = get_logger(__name__)
 def handle_exception(
     e: Exception,
     context: str,
-    user_message: str = "操作失败",
+    user_message: str = "Operation failed",
     status_code: int = 500,
     log_level: str = "error"
 ) -> HTTPException:
@@ -25,5 +25,5 @@ def handle_exception(
         HTTPException with safe user message
     """
     logger_func = getattr(log, log_level)
-    logger_func(f"{context} 失败: {type(e).__name__}: {str(e)}", exc_info=True)
+    logger_func(f"{context} failed: {type(e).__name__}: {str(e)}", exc_info=True)
     return HTTPException(status_code=status_code, detail=user_message)

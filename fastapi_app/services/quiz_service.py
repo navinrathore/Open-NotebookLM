@@ -1,6 +1,6 @@
 """
-Quiz 生成服务
-从知识库文档中生成单选题测验
+Quiz Generation Service
+Generates multiple-choice quizzes from knowledge base documents.
 """
 import json
 import re
@@ -24,38 +24,38 @@ async def generate_quiz_with_llm(
     question_count: int,
 ) -> List[QuizQuestion]:
     """
-    使用 LLM 从文本内容生成 Quiz 题目
+    Generate quiz questions from text content using LLM.
 
     Args:
-        text_content: 文档文本内容
-        api_url: LLM API 地址
-        api_key: API 密钥
-        model: 模型名称
-        language: 语言（zh/en）
-        question_count: 生成题目数量
+        text_content: Document text content
+        api_url: LLM API URL
+        api_key: API Key
+        model: Model name
+        language: Language (zh/en)
+        question_count: Number of questions to generate
 
     Returns:
-        Quiz 题目列表
+        List of Quiz questions
     """
-    # 限制文本长度，避免超出 token 限制
+    # Limit text length to avoid token limits
     max_chars = 10000
     if len(text_content) > max_chars:
         text_content = text_content[:max_chars] + "..."
 
-    # 构建 Prompt
+    # Build Prompt
     prompt = _build_quiz_prompt(text_content, language, question_count)
 
-    log.info(f"[quiz_service] 开始调用 LLM 生成 Quiz，模型: {model}, 数量: {question_count}")
+    log.info(f"[quiz_service] Starting LLM call for Quiz, model: {model}, count: {question_count}")
 
     try:
-        # 确保 API URL 包含完整路径
+        # Ensure API URL contains full path
         if not api_url.endswith('/chat/completions'):
             if api_url.endswith('/'):
                 api_url = api_url + 'chat/completions'
             else:
                 api_url = api_url + '/chat/completions'
 
-        # 调用 LLM API
+        # Call LLM API
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -71,59 +71,59 @@ async def generate_quiz_with_llm(
             response.raise_for_status()
             result = response.json()
 
-        # 解析 LLM 返回的内容
+        # Parse LLM response
         content = result["choices"][0]["message"]["content"]
         questions = _parse_quiz_from_llm_response(content, question_count)
 
-        log.info(f"[quiz_service] 成功生成 {len(questions)} 道题目")
+        log.info(f"[quiz_service] Successfully generated {len(questions)} questions")
         return questions
 
     except Exception as e:
-        log.error(f"[quiz_service] LLM 调用失败: {e}")
-        raise Exception(f"生成 Quiz 失败: {str(e)}")
+        log.error(f"[quiz_service] LLM call failed: {e}")
+        raise Exception(f"Failed to generate Quiz: {str(e)}")
 
 
 def _build_quiz_prompt(text_content: str, language: str, question_count: int) -> str:
     """
-    构建生成 Quiz 的 Prompt
+    Build prompt for quiz generation.
 
-    出题原则：
-    1. 考察理解和应用，而非简单记忆
-    2. 选项设计合理，干扰项有迷惑性
-    3. 答案明确，有据可依
-    4. 覆盖文档的关键知识点
+    Principles:
+    1. Focus on understanding and application rather than simple memorization.
+    2. Reasonable options with distracting incorrect answers.
+    3. Clear answers based on the document.
+    4. Cover key knowledge points.
     """
     if language == "zh":
-        prompt = f"""请基于以下文档内容，生成 {question_count} 道高质量的单选题测验题目。
+        prompt = f"""Based on the following document content, generate {question_count} high-quality multiple-choice quiz questions.
 
-文档内容：
+Document Content:
 {text_content}
 
-出题要求：
-1. 题目类型：单选题，每题 4 个选项（A、B、C、D）
-2. 考察理解和应用，题目清晰无歧义，干扰项有迷惑性
-3. 难度分布：简单 30%、中等 50%、困难 20%
-4. explanation 字段：1-2 句话简要说明正确答案的理由，不要逐个分析错误选项
+Requirements:
+1. Question Type: Multiple choice, each question must have exactly 4 options (A, B, C, D)
+2. Test understanding and application, clear and unambiguous, with plausible distractors
+3. Difficulty Distribution: Easy 30%, Medium 50%, Hard 20%
+4. explanation field: 1-2 sentences briefly explaining the reason for the correct answer, do not analyze each incorrect option individually
 
-请严格按以下 JSON 格式返回（不要添加额外字段）：
+Please return strictly in the following JSON format (do not add extra fields):
 ```json
 [
   {{
     "id": "q1",
-    "question": "题目内容",
+    "question": "Question content",
     "options": [
-      {{"label": "A", "text": "选项A"}},
-      {{"label": "B", "text": "选项B"}},
-      {{"label": "C", "text": "选项C"}},
-      {{"label": "D", "text": "选项D"}}
+      {{"label": "A", "text": "Option A"}},
+      {{"label": "B", "text": "Option B"}},
+      {{"label": "C", "text": "Option C"}},
+      {{"label": "D", "text": "Option D"}}
     ],
     "correct_answer": "A",
-    "explanation": "简短解释（1-2句话）"
+    "explanation": "Short explanation (1-2 sentences)"
   }}
 ]
 ```
 
-请确保返回完整、有效的 JSON。"""
+Please ensure the returned JSON is complete and valid."""
     else:
         prompt = f"""Based on the following document content, generate {question_count} high-quality multiple-choice quiz questions.
 
@@ -160,15 +160,15 @@ Ensure the response is complete, valid JSON."""
 
 
 def _try_parse_json_array(json_str: str):
-    """尝试解析 JSON 数组，失败时逐步回退到最后一个完整对象"""
-    # 先直接尝试
+    """Attempt to parse JSON array, back off to the last complete object if needed."""
+    # Try directly first
     try:
         return json.loads(json_str)
     except json.JSONDecodeError:
         pass
 
-    # 找所有顶层 '}' 的位置（每个代表一个 question 对象的结尾）
-    # 从后往前逐个尝试截断 + 闭合
+    # Find positions of all top-level '}' (marking ends of question objects)
+    # Try truncation + closing from end to beginning
     brace_depth = 0
     bracket_depth = 0
     in_string = False
@@ -197,7 +197,7 @@ def _try_parse_json_array(json_str: str):
         elif ch == ']':
             bracket_depth -= 1
 
-    # 从最后一个完整对象往前尝试
+    # Attempt from the last complete object backwards
     for pos in reversed(candidates):
         attempt = json_str[:pos + 1] + ']'
         try:
@@ -210,22 +210,22 @@ def _try_parse_json_array(json_str: str):
 
 def _parse_quiz_from_llm_response(content: str, question_count: int) -> List[QuizQuestion]:
     """
-    从 LLM 返回的内容中解析 Quiz 题目
+    Parse Quiz questions from LLM response content.
     """
     try:
-        # 尝试提取 JSON（可能包含在 markdown 代码块中）
-        # 用贪婪匹配，因为内容可能被截断没有闭合的 ```
+        # Attempt JSON extraction (might be in markdown blocks)
+        # Use greedy match for truncated content without closing ```
         json_match = re.search(r'```(?:json)?\s*(\[[\s\S]*)', content)
         if json_match:
             json_str = json_match.group(1)
-            # 去掉尾部可能的 ```
+            # Remove possible trailing ```
             json_str = re.sub(r'\s*```\s*$', '', json_str)
         else:
             json_str = content.strip()
 
         questions_data = _try_parse_json_array(json_str)
 
-        # 转换为 QuizQuestion 对象
+        # Convert to QuizQuestion objects
         questions = []
         for i, q_data in enumerate(questions_data[:question_count]):
             options = []
@@ -248,13 +248,13 @@ def _parse_quiz_from_llm_response(content: str, question_count: int) -> List[Qui
             questions.append(question)
 
         if not questions:
-            raise Exception("解析后题目列表为空")
+            raise Exception("Question list is empty after parsing")
 
-        log.info(f"[quiz_service] 成功解析 {len(questions)} 道题目（请求 {question_count} 道）")
+        log.info(f"[quiz_service] Successfully parsed {len(questions)} questions (requested {question_count})")
         return questions
 
     except Exception as e:
-        log.error(f"[quiz_service] 解析 Quiz 失败: {e}")
-        log.error(f"[quiz_service] LLM 返回内容: {content[:500]}")
-        raise Exception(f"解析 Quiz 失败: {str(e)}")
+        log.error(f"[quiz_service] Failed to parse Quiz: {e}")
+        log.error(f"[quiz_service] LLM Response: {content[:500]}")
+        raise Exception(f"Failed to parse Quiz: {str(e)}")
 

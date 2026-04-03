@@ -32,7 +32,7 @@ function decodeBase64Utf8(input: string): string {
 }
 
 function resolveAliyunSmsSignName(): string {
-  const fallback = "速通互联验证码";
+  const fallback = "Verification Code";
 
   const b64 = Deno.env.get("ALIYUN_SMS_SIGN_NAME_B64")?.trim();
   if (b64) {
@@ -121,7 +121,7 @@ async function sendAliyunSms(args: {
     !Deno.env.get("ALIYUN_SMS_VERSION")
   ) {
     console.warn(
-      `[send-sms] ALIYUN_SMS_VERSION not set; using default '${version}'. If Aliyun returns INVALID_PARAMETERS, set the correct Version from the API's '公共请求参数'.`,
+      `[send-sms] ALIYUN_SMS_VERSION not set; using default '${version}'. If Aliyun returns INVALID_PARAMETERS, set the correct Version from the API's 'Public Request Parameters'.`,
     );
   }
 

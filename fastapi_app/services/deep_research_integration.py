@@ -1,6 +1,6 @@
 """
-完整集成阿里 DeepResearch 到 Open-NotebookLM
-使用内部 deep_research 模块
+Complete integration of Ali DeepResearch into Open-NotebookLM
+Uses internal deep_research module
 """
 import os
 import json
@@ -16,7 +16,7 @@ log = get_logger(__name__)
 
 
 class DeepResearchIntegration:
-    """完整集成阿里 DeepResearch"""
+    """Full integration of Ali DeepResearch"""
 
     def __init__(
         self,
@@ -29,20 +29,20 @@ class DeepResearchIntegration:
         dashscope_key: Optional[str] = None,
         sandbox_endpoints: Optional[str] = None,
     ):
-        # 配置参数（优先使用传入参数，其次使用环境变量）
+        # Configuration parameters (priority: passed parameters > environment variables)
         self.model_name = model_name or os.getenv("DEEP_RESEARCH_MODEL", "qwen-plus")
         self.api_base = api_base or os.getenv("DEEP_RESEARCH_API_BASE", "http://127.0.0.1:6001")
         self.api_key = api_key or os.getenv("DEEP_RESEARCH_API_KEY", "EMPTY")
         self.max_iterations = max_iterations or int(os.getenv("DEEP_RESEARCH_MAX_ITERATIONS", "50"))
 
-        # 工具配置（优先使用传入参数，其次使用环境变量）
+        # Tool configuration (priority: passed parameters > environment variables)
         self.serper_key = serper_key or os.getenv("SERPER_KEY_ID", os.getenv("SERPER_API_KEY", ""))
         self.jina_keys = jina_keys or os.getenv("JINA_API_KEYS", "")
         self.dashscope_key = dashscope_key or os.getenv("DASHSCOPE_API_KEY", "")
         self.sandbox_endpoints = sandbox_endpoints or os.getenv("SANDBOX_FUSION_ENDPOINT", "")
 
-        # 调试日志
-        log.info(f"[DeepResearchIntegration] 初始化配置:")
+        # Debug logging
+        log.info(f"[DeepResearchIntegration] Initializing configuration:")
         log.info(f"  - model_name: {self.model_name}")
         log.info(f"  - api_base: {self.api_base}")
         log.info(f"  - serper_key: {'***' if self.serper_key else 'None'} (length: {len(self.serper_key) if self.serper_key else 0})")
@@ -57,13 +57,13 @@ class DeepResearchIntegration:
         presence_penalty: float = 1.1,
     ) -> Dict[str, Any]:
         """
-        运行完整的 DeepResearch 推理
+        Run complete DeepResearch reasoning.
 
         Args:
-            query: 研究问题
-            max_iterations: 最大迭代次数
-            temperature: 采样温度
-            presence_penalty: 存在惩罚
+            query: Research question
+            max_iterations: Maximum iterations
+            temperature: Sampling temperature
+            presence_penalty: Presence penalty
 
         Returns:
             {
@@ -76,15 +76,15 @@ class DeepResearchIntegration:
                 "iterations": int
             }
         """
-        log.info(f"[DeepResearch] 开始研究: {query}")
+        log.info(f"[DeepResearch] Starting research: {query}")
 
         try:
-            # 检查必要的配置
+            # Check necessary configuration
             if not self.serper_key:
-                raise ValueError("SERPER_KEY_ID 或 SERPER_API_KEY 未配置")
+                raise ValueError("SERPER_KEY_ID or SERPER_API_KEY is not configured")
 
-            # ⚠️ 重要：在创建 Agent 之前设置环境变量
-            # 因为工具在模块加载时读取环境变量
+            # ⚠️ Important: Set environment variables before creating the Agent
+            # because tools read them during module loading.
             import os
             os.environ["SERPER_KEY_ID"] = self.serper_key
             if self.jina_keys:
@@ -92,12 +92,12 @@ class DeepResearchIntegration:
             if self.dashscope_key:
                 os.environ["DASHSCOPE_API_KEY"] = self.dashscope_key
 
-            # ⚠️ Visit 工具的 call_server 需要这三个环境变量来调用 LLM 总结网页内容
+            # ⚠️ Visit tool's call_server needs these three environment variables to call LLM for page summary
             os.environ["API_KEY"] = self.api_key
             os.environ["API_BASE"] = self.api_base
             os.environ["SUMMARY_MODEL_NAME"] = self.model_name
 
-            # 配置 LLM
+            # Configure LLM
             llm_config = {
                 "model": self.model_name,
                 "api_base": self.api_base,
@@ -110,13 +110,13 @@ class DeepResearchIntegration:
                 }
             }
 
-            # 创建 Agent
+            # Create Agent
             agent = MultiTurnReactAgent(llm=llm_config)
 
-            # 设置最大迭代次数
+            # Set maximum iterations
             max_iter = max_iterations or self.max_iterations
 
-            # 运行推理（在线程池中运行，避免阻塞）
+            # Run reasoning (run in thread pool to avoid blocking)
             result = await asyncio.to_thread(
                 self._run_agent_sync,
                 agent,
@@ -124,23 +124,23 @@ class DeepResearchIntegration:
                 max_iter
             )
 
-            log.info(f"[DeepResearch] 完成研究，迭代次数: {result['iterations']}")
+            log.info(f"[DeepResearch] Research completed, iterations: {result['iterations']}")
 
             return result
 
         except ImportError as e:
-            log.error(f"[DeepResearch] 导入失败: {e}")
+            log.error(f"[DeepResearch] Import failed: {e}")
             return {
                 "success": False,
                 "query": query,
                 "answer": "",
                 "messages": [],
                 "sources": [],
-                "error": f"DeepResearch 模块导入失败: {str(e)}",
+                "error": f"DeepResearch module import failed: {str(e)}",
                 "termination": "import_error"
             }
         except Exception as e:
-            log.error(f"[DeepResearch] 执行失败: {e}")
+            log.error(f"[DeepResearch] Execution failed: {e}")
             return {
                 "success": False,
                 "query": query,
@@ -152,32 +152,32 @@ class DeepResearchIntegration:
             }
 
     def _run_agent_sync(self, agent, query, max_iterations):
-        """同步运行 Agent（在线程池中调用）"""
+        """Run Agent synchronously (called in thread pool)"""
         try:
-            # 构造 data 参数，符合原始 _run 方法的要求
-            # 传递完整的 API base URL 而不是端口号
+            # Construct data parameter, following requirements of original _run method
+            # Pass full API base URL instead of port number
             data = {
                 "item": {
                     "question": query,
-                    "answer": ""  # 我们不知道答案，留空
+                    "answer": ""  # Unknown answer, leave blank
                 },
-                "planning_port": self.api_base  # 传递完整的 API base URL
+                "planning_port": self.api_base  # Pass full API base URL
             }
 
-            log.info(f"[DeepResearch] 调用 Agent，API base: {self.api_base}, model: {self.model_name}")
+            log.info(f"[DeepResearch] Calling Agent, API base: {self.api_base}, model: {self.model_name}")
 
-            # 调用 Agent 的 _run 方法
+            # Call Agent's _run method
             result = agent._run(
                 data=data,
                 model=self.model_name
             )
 
-            # 解析结果
+            # Parse results
             messages = result.get("messages", [])
             answer = result.get("prediction", "")
             termination = result.get("termination", "unknown")
 
-            # 提取来源
+            # Extract sources
             sources = self._extract_sources_from_messages(messages)
 
             return {
@@ -191,45 +191,45 @@ class DeepResearchIntegration:
             }
 
         except Exception as e:
-            log.error(f"[DeepResearch] Agent 运行失败: {e}")
+            log.error(f"[DeepResearch] Agent run failed: {e}")
             import traceback
             traceback.print_exc()
             raise
 
     def _extract_answer(self, messages: List) -> str:
-        """从消息列表中提取最终答案"""
+        """Extract final answer from messages list"""
         for msg in reversed(messages):
             content = str(msg.content) if hasattr(msg, 'content') else str(msg)
 
-            # 查找 <answer> 标签
+            # Look for <answer> tag
             if "<answer>" in content and "</answer>" in content:
                 import re
                 match = re.search(r'<answer>(.*?)</answer>', content, re.DOTALL)
                 if match:
                     return match.group(1).strip()
 
-            # 如果没有 answer 标签，返回最后一条 assistant 消息
+            # If no answer tag, return last assistant message
             if hasattr(msg, 'role') and msg.role == "assistant":
-                # 移除 think 标签
+                # Remove think tag
                 import re
                 content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
                 content = re.sub(r'<tool_call>.*?</tool_call>', '', content, flags=re.DOTALL)
                 return content.strip()
 
-        return "未生成答案"
+        return "No answer generated"
 
     def _extract_sources(self, messages: List) -> List[Dict]:
-        """从消息中提取引用的来源（兼容 Message 对象）"""
+        """Extract quoted sources from messages (Message object compatible)"""
         sources = []
         seen_urls = set()
 
         for msg in messages:
             content = str(msg.content) if hasattr(msg, 'content') else str(msg)
 
-            # 提取 tool_response 中的 URL
+            # Extract URLs from tool_response
             if "<tool_response>" in content:
                 import re
-                # 提取所有 URL
+                # Extract all URLs
                 urls = re.findall(r'https?://[^\s<>"\']+', content)
                 for url in urls:
                     if url not in seen_urls:
@@ -242,17 +242,17 @@ class DeepResearchIntegration:
         return sources
 
     def _extract_sources_from_messages(self, messages: List[Dict]) -> List[Dict]:
-        """从消息字典列表中提取引用的来源"""
+        """Extract quoted sources from messages list of dicts"""
         sources = []
         seen_urls = set()
 
         for msg in messages:
             content = msg.get("content", "")
 
-            # 提取 tool_response 中的 URL
+            # Extract URLs from tool_response
             if "<tool_response>" in content:
                 import re
-                # 提取所有 URL
+                # Extract all URLs
                 urls = re.findall(r'https?://[^\s<>"\']+', content)
                 for url in urls:
                     if url not in seen_urls:
@@ -265,7 +265,7 @@ class DeepResearchIntegration:
         return sources
 
     def _determine_termination(self, messages: List, max_iterations: int) -> str:
-        """判断终止原因"""
+        """Determine termination reason"""
         if not messages:
             return "no_messages"
 
@@ -282,7 +282,7 @@ class DeepResearchIntegration:
         return "unknown"
 
     def _message_to_dict(self, msg) -> Dict:
-        """将 Message 对象转换为字典"""
+        """Convert Message object to dict"""
         if hasattr(msg, 'role') and hasattr(msg, 'content'):
             return {
                 "role": msg.role,
@@ -295,7 +295,7 @@ class DeepResearchIntegration:
             }
 
     def format_result_as_markdown(self, result: Dict[str, Any]) -> str:
-        """将研究结果格式化为 Markdown"""
+        """Format research results as Markdown"""
         md_lines = [
             f"# Deep Research: {result['query']}",
             "",
@@ -305,7 +305,7 @@ class DeepResearchIntegration:
             "",
         ]
 
-        # 添加来源
+        # Add sources
         sources = result.get("sources", [])
         if sources:
             md_lines.extend([
@@ -317,7 +317,7 @@ class DeepResearchIntegration:
                 md_lines.append(f"{i}. [{url}]({url})")
             md_lines.append("")
 
-        # 添加元数据
+        # Add metadata
         md_lines.extend([
             "---",
             "",
@@ -331,7 +331,7 @@ class DeepResearchIntegration:
         return "\n".join(md_lines)
 
     async def check_dependencies(self) -> Dict[str, bool]:
-        """检查依赖是否满足"""
+        """Check if dependencies are met"""
         checks = {
             "serper_key": bool(self.serper_key),
             "jina_keys": bool(self.jina_keys),
@@ -347,7 +347,7 @@ class DeepResearchIntegration:
         return checks
 
     def get_config_info(self) -> Dict[str, Any]:
-        """获取配置信息"""
+        """Get configuration information"""
         return {
             "model": self.model_name,
             "api_base": self.api_base,

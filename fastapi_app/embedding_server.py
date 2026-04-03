@@ -1,7 +1,7 @@
 """
-本地 Embedding 服务：加载 Octen/Octen-Embedding-0.6B，提供 OpenAI 兼容的 POST /v1/embeddings。
-可单独启动：uvicorn fastapi_app.embedding_server:app --host 127.0.0.1 --port 17997
-或由主后端在 USE_LOCAL_EMBEDDING=1 时自动拉起。
+Local Embedding Service: Loads Octen/Octen-Embedding-0.6B, provides OpenAI-compatible POST /v1/embeddings.
+Can be started independently: uvicorn fastapi_app.embedding_server:app --host 127.0.0.1 --port 17997
+Or automatically started by the main backend if USE_LOCAL_EMBEDDING=1.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ HF_MODEL_ID = "Octen/Octen-Embedding-0.6B"
 
 
 def _pick_device() -> str:
-    """通过 nvidia-smi 查询空闲显存最多的 GPU，避免触碰已损坏的 CUDA context。"""
+    """Query the GPU with the most free memory via nvidia-smi to avoid touching corrupted CUDA contexts."""
     import subprocess
     try:
         result = subprocess.run(
@@ -26,35 +26,35 @@ def _pick_device() -> str:
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode != 0:
-            print(f"[embedding_server] nvidia-smi 失败，回退到 CPU")
+            print(f"[embedding_server] nvidia-smi failed, falling back to CPU")
             return "cpu"
         best_idx, best_free = -1, 0
         for line in result.stdout.strip().splitlines():
             parts = [p.strip() for p in line.split(",")]
             idx, free, total = int(parts[0]), int(parts[1]), int(parts[2])
-            print(f"[embedding_server] GPU {idx}: 空闲 {free} MB / 总共 {total} MB")
+            print(f"[embedding_server] GPU {idx}: Free {free} MB / Total {total} MB")
             if free > best_free:
                 best_free = free
                 best_idx = idx
-        if best_idx >= 0 and best_free > 512:  # 至少 512 MB 空闲
+        if best_idx >= 0 and best_free > 512:  # At least 512 MB free
             device = f"cuda:{best_idx}"
-            print(f"[embedding_server] 选择 {device}（空闲 {best_free} MB）")
+            print(f"[embedding_server] Selected {device} ({best_free} MB free)")
             return device
-        print("[embedding_server] 所有 GPU 显存不足，回退到 CPU")
+        print("[embedding_server] Insufficient GPU memory, falling back to CPU")
         return "cpu"
     except Exception as e:
-        print(f"[embedding_server] 查询 GPU 失败: {e}，回退到 CPU")
+        print(f"[embedding_server] Failed to query GPU: {e}, falling back to CPU")
         return "cpu"
 
 
 def _get_embedder():
-    """懒加载，首次请求时下载并加载模型，自动选择空闲 GPU。"""
+    """Lazy loading: downloads and loads the model on first request, automatically selects free GPU."""
     if _get_embedder._model is None:
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError:
             raise RuntimeError(
-                "请安装 sentence-transformers: pip install sentence-transformers"
+                "Please install sentence-transformers: pip install sentence-transformers"
             )
         device = _pick_device()
         _get_embedder._model = SentenceTransformer(HF_MODEL_ID, device=device)
@@ -65,8 +65,8 @@ _get_embedder._model = None
 
 
 class EmbeddingRequest(BaseModel):
-    model: str = Field(default=EMBEDDING_MODEL_NAME, description="模型名，可忽略")
-    input: Union[str, List[str]] = Field(..., description="单条文本或文本列表")
+    model: str = Field(default=EMBEDDING_MODEL_NAME, description="Model name, optional")
+    input: Union[str, List[str]] = Field(..., description="Single text string or list of text strings")
 
 
 class EmbeddingItem(BaseModel):
@@ -83,24 +83,24 @@ class EmbeddingResponse(BaseModel):
 
 
 def _ensure_model_loaded():
-    """启动时检查：已缓存则 log 提示，未缓存则下载并加载。"""
+    """Startup check: Log if cached, download and load if not."""
     try:
         from huggingface_hub import snapshot_download
         snapshot_download(repo_id=HF_MODEL_ID, local_files_only=True)
-        print(f"[embedding_server] 模型已缓存，正在加载 {HF_MODEL_ID} ...")
+        print(f"[embedding_server] Model cached, loading {HF_MODEL_ID} ...")
     except Exception:
-        print(f"[embedding_server] 模型未缓存，正在下载并加载 {HF_MODEL_ID}（首次较慢）...")
+        print(f"[embedding_server] Model not cached, downloading and loading {HF_MODEL_ID} (slow for the first time)...")
     _get_embedder()
-    print(f"[embedding_server] {EMBEDDING_MODEL_NAME} 已就绪。")
+    print(f"[embedding_server] {EMBEDDING_MODEL_NAME} is ready.")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时检查/下载并加载模型，不再依赖远程 embedding
+    # Startup check: download and load model, no longer depends on remote embedding
     try:
         _ensure_model_loaded()
     except Exception as e:
-        print(f"[embedding_server] 加载失败: {e}")
+        print(f"[embedding_server] Load failed: {e}")
         raise
     yield
     if _get_embedder._model is not None:
@@ -120,25 +120,25 @@ app = FastAPI(
 
 @app.post("/v1/embeddings", response_model=EmbeddingResponse)
 async def embeddings(req: EmbeddingRequest):
-    """OpenAI 兼容的 embedding 接口。"""
+    """OpenAI-compatible embedding interface."""
     if isinstance(req.input, str):
         texts = [req.input]
     else:
         texts = list(req.input)
     if not texts:
-        raise HTTPException(status_code=400, detail="input 不能为空")
+        raise HTTPException(status_code=400, detail="input cannot be empty")
 
-    # 限制单次 batch 大小，避免 OOM
+    # Limit batch size to avoid OOM
     max_batch = int(os.getenv("EMBEDDING_MAX_BATCH", "32"))
     if len(texts) > max_batch:
         raise HTTPException(
             status_code=400,
-            detail=f"单次最多 {max_batch} 条，当前 {len(texts)} 条",
+            detail=f"Max {max_batch} items per request, current is {len(texts)}",
         )
 
     try:
         model = _get_embedder()
-        # 换行可能影响效果，与 VectorStoreManager 行为一致
+        # Newlines might affect quality, behavior consistent with VectorStoreManager
         texts_clean = [t.replace("\n", " ").strip() or " " for t in texts]
         emb = model.encode(
             texts_clean,

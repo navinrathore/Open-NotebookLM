@@ -45,19 +45,19 @@ async def call_ocr_async(
     **kwargs,
 ) -> str:
     """
-    调用OCR模型 (例如 Qwen-VL-OCR)
-    使用 Provider 策略进行请求构建
+    Calls OCR model (e.g., Qwen-VL-OCR)
+    Uses Provider strategy for request construction
     """
     
-    # 1. 准备消息列表 (深拷贝以避免修改原列表)
+    # 1. Prepare messages list (deep copy to avoid modifying the original list)
     processed_messages = [msg.copy() for msg in messages]
     
-    # 2. 处理图像注入 (这部分逻辑通常是通用的，可以在这里保留，也可以移到 Provider)
-    # 目前保持在这里，因为这是业务层面的“如何组合消息”
+    # 2. Handle image injection (this logic is usually common and can be kept here or moved to Provider)
+    # Keeping it here for now as this is business-level "how to compose messages"
     if image_path:
         b64, fmt = encode_image_to_base64(image_path)
         
-        # 找到最后一条 user 消息注入图片
+        # Find the last user message to inject the image
         target_msg = None
         for m in reversed(processed_messages):
             if m["role"] == "user":
@@ -84,7 +84,7 @@ async def call_ocr_async(
                 ]
             })
 
-    # 3. 使用 Provider 构造请求
+    # 3. Use Provider to construct request
     provider = get_provider(api_url, model)
     url, payload = provider.build_chat_request(
         api_url=api_url,
@@ -95,10 +95,10 @@ async def call_ocr_async(
         **kwargs
     )
     
-    # 4. 发送请求
+    # 4. Send request
     data = await _post_raw(url, api_key, payload, timeout)
     
-    # 5. 解析响应
+    # 5. Parse response
     return provider.parse_chat_response(data)
 
 if __name__ == "__main__":
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    # --- 辅助函数：创建测试图片 ---
+    # --- Helper function: Create test image ---
     def create_text_image(path: str, text="Hello World"):
         if not os.path.exists(path):
             try:

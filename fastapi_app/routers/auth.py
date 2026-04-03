@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 def ensure_user_directory(user_email: str) -> None:
-    """确保用户目录存在"""
+    """Ensure user directory exists"""
     try:
         safe_user_id = _sanitize_user_id(user_email)
         user_dir = get_project_root() / "outputs" / safe_user_id
@@ -60,7 +60,7 @@ async def get_auth_config() -> Dict[str, Any]:
 
     return {
         "supabaseConfigured": configured,
-        "authMode": "backend-proxy"  # 告诉前端使用后端代理模式
+        "authMode": "backend-proxy"  # Tell frontend to use backend proxy mode
     }
 
 
@@ -86,7 +86,7 @@ async def login(request: LoginRequest, response: Response) -> Dict[str, Any]:
             # 确保用户目录存在
             ensure_user_directory(request.email)
 
-            # 设置 HTTP-only cookie
+            # Set HTTP-only cookies
             response.set_cookie(
                 key="sb-access-token",
                 value=result.session.access_token,
@@ -167,7 +167,7 @@ async def signup(request: SignupRequest, response: Response) -> Dict[str, Any]:
         if "rate limit" in error_msg.lower():
             raise HTTPException(
                 status_code=429,
-                detail="注册请求过于频繁，请稍后再试（Rate limit exceeded, please try again later）"
+                detail="Rate limit exceeded, please try again later"
             )
         raise HTTPException(status_code=400, detail=error_msg)
 

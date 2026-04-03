@@ -2,56 +2,56 @@
 """
 ppt_tool
 
-本模块将一组顺序图片通过 PaddleOCR 识别为可编辑文本，自动分析行高、版式和颜色，生成带“干净底图+覆盖文字框”的 PPTX，并可选同时导出 PDF；
-内部提供多种参数控制背景 inpaint 强度（INPAINT_METHOD/INPAINT_RADIUS、SIMPLE_BG_VAR_THRESH、MASK_DILATE_ITER、USE_ADAPTIVE_MASK）、
-OCR 分辨率与锐化（UPSCALE_LONG_SIDE_TO、UPSCALE_INTERP、ENABLE_SHARPEN、SHARPEN_AMOUNT）、
-文本过滤阈值（DROP_SCORE）以及字号放大与标题/副标题对正文的比例（BASE_BODY_PT、FONT_SCALE_FACTOR、TITLE_RATIO_*/SUBTITLE_RATIO_*/BODY_RATIO_*），
-并通过 ADD_BACKGROUND_IMAGE / CLEAN_BACKGROUND / EXTRACT_TEXT_COLOR 控制是否叠加背景图片、是否抠掉原文字、是否按原图估计文字颜色，从而在“还原视觉效果”与“可编辑性/美观度”和运行性能之间做平衡。
+This module identifies a sequence of images as editable text via PaddleOCR, automatically analyzes line height, layout, and color, generates a PPTX with a "clean background + overlay text boxes", and optionally exports a PDF simultaneously.
+It provides multiple parameters to control background inpaint strength (INPAINT_METHOD/INPAINT_RADIUS, SIMPLE_BG_VAR_THRESH, MASK_DILATE_ITER, USE_ADAPTIVE_MASK),
+OCR resolution and sharpening (UPSCALE_LONG_SIDE_TO, UPSCALE_INTERP, ENABLE_SHARPEN, SHARPEN_AMOUNT),
+text filtering threshold (DROP_SCORE), and font size amplification and the ratio of title/subtitle to body (BASE_BODY_PT, FONT_SCALE_FACTOR, TITLE_RATIO_*/SUBTITLE_RATIO_*/BODY_RATIO_*).
+It balances "restoring visual effects" with "editability/aesthetics" and performance by controlling whether to overlay background images, remove original text, and estimate text color based on the original image through ADD_BACKGROUND_IMAGE / CLEAN_BACKGROUND / EXTRACT_TEXT_COLOR.
 
-功能概述：
-- 从指定目录按自然顺序读取图片
-- 生成包含所有图片页的 PDF 文件
-- 使用 PaddleOCR 对页面进行 OCR，识别文本行
-- 基于识别结果自动估计字体大小和颜色，将文本叠加到 PPTX 中
-- 可选地对原始页面进行 inpaint，生成“去文字的干净底图”作为 PPT 背景
+Feature Overview:
+- Read images in natural order from a specified directory
+- Generate a PDF file containing all image pages
+- Use PaddleOCR to perform OCR on pages and identify text lines
+- Automatically estimate font size and color based on recognition results and overlay text on PPTX
+- Optionally inpaint the original page to generate a "clean background without text" as the PPT background
 
-典型用法：
-- 在 DataFlow-Agent 的图像处理流程中，作为从图片页到可编辑 PPT 文稿的后处理工具
-- 也可在其它组件或脚本中通过对外函数直接调用
+Typical Usage:
+- Used as a post-processing tool from image pages to editable PPT documents in the image processing workflow of DataFlow-Agent
+- Can also be directly called via external functions in other components or scripts
 """
 
-# 函数一览：
-# natural_key(s): 生成用于文件名“自然排序”的 key，将数字部分按整数比较。
-# list_images_in_dir(d): 按自然顺序列出目录中的所有图片文件路径。
-# read_bgr(path): 以兼容非 ASCII 路径的方式读取图片，并返回标准 BGR uint8 格式。
-# debug_dump(img, tag): 将中间图像写入调试目录并记录基础统计信息。
-# images_to_pdf(image_paths, output_pdf_path): 将一组图片顺序导出为单个 PDF 文件。
-# pdf_to_images(pdf_path, out_dir, dpi): 将 PDF 每一页按指定分辨率渲染为 PNG，并返回图片路径列表。
-# upscale_if_needed(bgr, long_side_to, interp): 若分辨率偏低则按长边放大图像，返回放大后图像和缩放比例。
-# sharpen(bgr, amount): 使用“反锐化掩模”方式对图像进行轻度锐化。
-# preprocess_for_ocr(bgr): 对整页图像做放大与可选锐化，生成适合 OCR 的版本及缩放比例。
-# is_cjk(s): 判断字符串中是否包含 CJK（中日韩）字符。
-# iou(a, b): 计算两个矩形框的交并比（IoU）。
-# merge_lines(lines, y_tol, x_gap): 将 OCR 的短行/单词按行方向与间距合并成句级文本行。
-# text_score(lines): 根据字符数量、平均置信度及是否含 CJK，估计一组文本行的整体得分。
-# paddle_ocr(bgr, drop_score): 调用 PaddleOCR 对整页 BGR 图像做 OCR，并按置信度阈值过滤结果。
-# paddle_ocr_page_with_layout(img_path): 对单页图片做预处理 + OCR + 行合并 + 行高/背景色估计并返回布局信息。
-# extract_text_color(bgr, bbox, bg_color): 从给定文字区域估计主文字颜色，尽量排除接近背景的颜色。
-# estimate_background_color(bgr, lines): 用文字 mask 反选背景区域，估计页面主背景颜色。
-# px_to_emu(px, emu_per_px): 将像素值按给定比例转换为 PPT 使用的 EMU 单位。
-# analyze_line_heights(lines): 统计 OCR 行框高度分布，估计正文行高的中位数。
-# classify_line_role(bbox, img_h_px, body_h_px): 根据行高与垂直位置粗略区分标题、副标题和正文。
-# estimate_font_pt(bbox, img_h_px, body_h_px, slide_h_in): 依据原图行高比例估计在 PPT 中的字号大小。
-# add_background(slide, bgr, slide_w_emu, slide_h_emu, tmp_path): 将整页背景图添加到 PPT 幻灯片并删除临时文件。
-# build_text_mask_from_lines(bgr, lines): 基于 OCR 行框生成粗略的文字区域二值 mask。
-# build_adaptive_mask(bgr, lines): 结合局部对比度与自适应阈值，生成更精细的文字主 mask。
-# is_simple_background_region(bgr, mask): 判断文字区域邻域背景是否近似纯色（方差较小）。
-# fill_with_neighbor(bgr, mask): 对复杂背景的文字区域先用邻域像素进行粗填充，缓解 inpaint 伪影。
-# make_clean_background(bgr, lines): 基于文字 mask 和 inpaint 生成“去文字的干净底图”。
-# ocr_images_to_ppt(image_paths, output_pptx, add_background_image, clean_background, use_text_color): 将图片序列通过 OCR 转成带背景与覆盖文本框的可编辑 PPT。
-# images_to_pdf_and_ppt(image_paths, output_pdf_path, output_pptx_path, add_background_image, clean_background, extract_text_color): 将给定图片列表一站式转换为 PDF 和 PPTX 并返回路径。
-# convert_images_dir_to_pdf_and_ppt(input_dir, output_pdf_path, output_pptx_path, add_background_image, clean_background, extract_text_color): 从图片目录读取图片并生成对应的 PDF + PPTX。
-# convert_images_dir_to_pdf_and_ppt_api(input_dir, output_pdf_path, output_pptx_path, api_url, api_key, model, use_api_inpaint, add_background_image, clean_background, use_text_color): 异步版本的目录转 PDF/PPTX，优先使用图像编辑 API 做 inpainting，失败时回退到本地 inpaint。
+# Function Overview:
+# natural_key(s): Generates a key for "natural sorting" of filenames, comparing numeric parts as integers.
+# list_images_in_dir(d): Lists all image file paths in a directory in natural order.
+# read_bgr(path): Reads an image in a way compatible with non-ASCII paths and returns standard BGR uint8 format.
+# debug_dump(img, tag): Writes intermediate images to a debug directory and logs basic statistics.
+# images_to_pdf(image_paths, output_pdf_path): Exports a set of images sequentially as a single PDF file.
+# pdf_to_images(pdf_path, out_dir, dpi): Renders each page of a PDF as a PNG at a specified resolution and returns a list of image paths.
+# upscale_if_needed(bgr, long_side_to, interp): Enlarges the image by the long side if the resolution is low, returning the enlarged image and scale ratio.
+# sharpen(bgr, amount): Gently sharpens the image using the "unsharp mask" method.
+# preprocess_for_ocr(bgr): Enlarges and optionally sharpens the full-page image, generating a version suitable for OCR and its scale ratio.
+# is_cjk(s): Determines if a string contains CJK (Chinese, Japanese, Korean) characters.
+# iou(a, b): Calculates the Intersection over Union (IoU) of two bounding boxes.
+# merge_lines(lines, y_tol, x_gap): Merges OCR short lines/words into sentence-level text lines based on line direction and spacing.
+# text_score(lines): Estimates the overall score of a set of text lines based on characters, average confidence, and CJK presence.
+# paddle_ocr(bgr, drop_score): Calls PaddleOCR to perform OCR on a full-page BGR image and filters results by confidence threshold.
+# paddle_ocr_page_with_layout(img_path): Performs preprocessing + OCR + line merging + line height/background color estimation for a single page image and returns layout info.
+# extract_text_color(bgr, bbox, bg_color): Estimates main text color from a given text area, trying to exclude colors close to the background.
+# estimate_background_color(bgr, lines): Inverts text mask to select background area and estimates the main background color of the page.
+# px_to_emu(px, emu_per_px): Converts pixel values to EMU units used by PPT according to a given ratio.
+# analyze_line_heights(lines): Researches the distribution of OCR line box heights and estimates the median line height of the body.
+# classify_line_role(bbox, img_h_px, body_h_px): Roughly distinguishes between title, subtitle, and body based on line height and vertical position.
+# estimate_font_pt(bbox, img_h_px, body_h_px, slide_h_in): Estimates font size in PPT based on the line height ratio of the original image.
+# add_background(slide, bgr, slide_w_emu, slide_h_emu, tmp_path): Adds full-page background image to a PPT slide and deletes temp files.
+# build_text_mask_from_lines(bgr, lines): Generates a rough binary mask of text areas based on OCR line boxes.
+# build_adaptive_mask(bgr, lines): Generates a finer main text mask by combining local contrast and adaptive thresholding.
+# is_simple_background_region(bgr, mask): Determines if the background of text area neighborhood is approximately solid (low variance).
+# fill_with_neighbor(bgr, mask): Roughly fills text areas of complex backgrounds with neighborhood pixels to alleviate inpaint artifacts.
+# make_clean_background(bgr, lines): Generates a "clean background without text" based on text mask and inpaint.
+# ocr_images_to_ppt(image_paths, output_pptx, add_background_image, clean_background, use_text_color): Converts a sequence of images into an editable PPT with background and overlay text boxes via OCR.
+# images_to_pdf_and_ppt(image_paths, output_pdf_path, output_pptx_path, add_background_image, clean_background, extract_text_color): One-stop conversion of a given image list to PDF and PPTX and returns paths.
+# convert_images_dir_to_pdf_and_ppt(input_dir, output_pdf_path, output_pptx_path, add_background_image, clean_background, extract_text_color): Reads images from a directory and generates corresponding PDF + PPTX.
+# convert_images_dir_to_pdf_and_ppt_api(input_dir, output_pdf_path, output_pptx_path, api_url, api_key, model, use_api_inpaint, add_background_image, clean_background, use_text_color): Async version of directory to PDF/PPTX conversion, prioritizes image editing API for inpainting, falls back to local inpaint on failure.
 
 import os
 import re
@@ -79,48 +79,48 @@ from typing import Union
 log = get_logger(__name__)
 
 # ----------------------------
-# Config (默认配置，可通过对外函数参数进行部分覆盖)
+# Config (Default configuration, can be partially overridden via external function parameters)
 # ----------------------------
 ADD_BACKGROUND_IMAGE = True
-CLEAN_BACKGROUND = True  # 是否尝试抠掉文字、生成无字底图再叠加OCR文字
-EXTRACT_TEXT_COLOR = True  # 是否提取原图文字颜色
+CLEAN_BACKGROUND = True  # Whether to try removing text, generate a clean background and overlay OCR text
+EXTRACT_TEXT_COLOR = True  # Whether to extract original text color
 INPAINT_METHOD = cv2.INPAINT_TELEA  # or cv2.INPAINT_NS
-INPAINT_RADIUS = 7  # 增大修复半径（从3提高到7）
-SIMPLE_BG_VAR_THRESH = 50.0  # 放宽阈值（从12提高到50）
-MASK_DILATE_ITER = 2  # 增加膨胀次数（从1提高到2）
-USE_ADAPTIVE_MASK = True  # 使用自适应mask生成
+INPAINT_RADIUS = 7  # Increase inpaint radius (from 3 to 7)
+SIMPLE_BG_VAR_THRESH = 50.0  # Relax threshold (from 12 to 50)
+MASK_DILATE_ITER = 2  # Increase dilation iterations (from 1 to 2)
+USE_ADAPTIVE_MASK = True  # Use adaptive mask generation
 
-# 输出PPT比例（16:9）
+# Output PPT ratio (16:9)
 SLIDE_W_IN = 13.333
 SLIDE_H_IN = 7.5
 
-# Debug：落盘你送入 OCR 的图片，方便肉眼确认内容/分辨率/是否被处理坏
+# Debug: Dump images sent to OCR to easily manually confirm content/resolution/corruption
 DEBUG_DUMP_FIRST_N = 2
 DEBUG_DIR = f"{get_project_root()}/tests/debug_frames"
 
-# ---------- 核心修复：低分辨率页面的 OCR 前增强 ----------
-UPSCALE_LONG_SIDE_TO = 2200  # 建议 2000~3200，越大越慢
+# ---------- Core fix: OCR pre-enhancement for low-resolution pages ----------
+UPSCALE_LONG_SIDE_TO = 2200  # Recommend 2000~3200, larger is slower
 UPSCALE_INTERP = cv2.INTER_CUBIC
-ENABLE_SHARPEN = True  # 轻度锐化，提升边缘对比度
-SHARPEN_AMOUNT = 0.8  # 0.0~1.5 之间
+ENABLE_SHARPEN = True  # Gentle sharpening to enhance edge contrast
+SHARPEN_AMOUNT = 0.8  # Between 0.0~1.5
 
-# 识别过滤阈值
-DROP_SCORE = 30  # PaddleOCR 的score是 0-1，这里统一乘100后按0-100过滤
+# Recognition filtering threshold
+DROP_SCORE = 30  # PaddleOCR score is 0-1, here multiplied by 100 and filtered by 0-100
 
-# 字号优化配置（放大整体字号，明显拉开标题对正文的差距）
-BASE_BODY_PT = 16.0  # 正文基准字号
-FONT_SCALE_FACTOR = 1.0  # 全局字号缩放因子
-TITLE_RATIO_MIN = 2.0  # 标题最小倍率
-TITLE_RATIO_MAX = 3.5  # 标题最大倍率
-SUBTITLE_RATIO_MIN = 1.4  # 副标题最小倍率
-SUBTITLE_RATIO_MAX = 2.0  # 副标题最大倍率
-BODY_RATIO_MIN = 0.9  # 正文最小倍率
-BODY_RATIO_MAX = 1.1  # 正文最大倍率
+# Font size optimization configuration (enlarge overall font size, significantly differentiate titles from body)
+BASE_BODY_PT = 16.0  # Body baseline font size
+FONT_SCALE_FACTOR = 1.0  # Global font size scale factor
+TITLE_RATIO_MIN = 2.0  # Title minimum multiplier
+TITLE_RATIO_MAX = 3.5  # Title maximum multiplier
+SUBTITLE_RATIO_MIN = 1.4  # Subtitle minimum multiplier
+SUBTITLE_RATIO_MAX = 2.0  # Subtitle maximum multiplier
+BODY_RATIO_MIN = 0.9  # Body minimum multiplier
+BODY_RATIO_MAX = 1.1  # Body maximum multiplier
 
-# PaddleOCR 配置（全局只初始化一次）
+# PaddleOCR configuration (initialized only once globally)
 PADDLE_OCR = PaddleOCR(
-    use_angle_cls=True,  # 角度分类，处理横竖混排
-    lang="ch",  # 中文 + 英文
+    use_angle_cls=True,  # Angle classification, handles horizontal/vertical mixing
+    lang="ch",  # Chinese + English
     det_db_unclip_ratio=1.2 ,
     det_db_box_thresh=0.5
 )
@@ -131,9 +131,9 @@ PADDLE_OCR = PaddleOCR(
 
 class FontSizeClustering:
     """
-    自适应字号聚类器：将连续的、有噪声的字号估算值，映射到 K 个离散的"标准字号"。
-    支持全局聚类（全文档统一）或单页聚类。
-    依赖 sklearn.cluster.KMeans，如果缺失则回退到简单的众数/分位数策略。
+    Adaptive font size clusterer: maps continuous, noisy font size estimates to K discrete "standard font sizes".
+    Supports global clustering (uniform across all documents) or single-page clustering.
+    Depends on sklearn.cluster.KMeans, falls back to a simple mode/quantile strategy if missing.
     """
     def __init__(self, n_clusters: int = 4, merge_tol: float = 2.0):
         self.n_clusters = n_clusters
@@ -149,33 +149,33 @@ class FontSizeClustering:
 
     def fit(self, font_sizes: List[float]) -> "FontSizeClustering":
         """
-        输入原始字号列表（pt），计算聚类中心。
+        Input raw font size list (pt), calculate cluster centroids.
         """
-        # 过滤无效值
+        # Filter invalid values
         data = [x for x in font_sizes if x > 0]
         if not data:
-            self.centroids = [12.0] # 默认回退
+            self.centroids = [12.0] # Default fallback
             return self
 
-        # 1. 如果数据量太少，直接用原始值（去重排序）
+        # 1. If data size is too small, use original values (deduplicated and sorted)
         if len(data) < self.n_clusters:
             self.centroids = sorted(list(set(data)))
             return self
 
-        # 2. 如果没有 sklearn，回退到简单的直方图统计（取前K个高频值）
+        # 2. If sklearn is not available, fall back to simple histogram statistics (take top K high-frequency values)
         if not self.has_sklearn:
-            # 简单统计：取出现频率最高的 K 个，或者简单的分位数
-            # 这里用频率统计更符合"标准字号"的直觉
+            # Simple stats: take K most frequent, or simple quantiles
+            # Frequency stats fit the intuition of "standard font sizes" better here
             counts = Counter([round(x) for x in data])
             top_k = counts.most_common(self.n_clusters)
             self.centroids = sorted([float(x[0]) for x in top_k])
             return self
 
-        # 3. K-Means 聚类
+        # 3. K-Means clustering
         import numpy as np
         X = np.array(data).reshape(-1, 1)
         
-        # 动态调整 K：不能超过样本唯一值的数量
+        # Dynamically adjust K: cannot exceed number of unique values in samples
         n_unique = len(set([round(x, 1) for x in data]))
         real_k = min(self.n_clusters, n_unique)
         
@@ -189,26 +189,26 @@ class FontSizeClustering:
             curr = centers[0]
             for next_c in centers[1:]:
                 if (next_c - curr) < self.merge_tol:
-                    # 距离太近，合并（取平均）
+                    # Too close, merge (take average)
                     curr = (curr + next_c) / 2.0
                 else:
                     merged_centers.append(curr)
                     curr = next_c
             merged_centers.append(curr)
         
-        # 圆整到 0.5 pt
+        # Round to 0.5 pt
         self.centroids = [round(c * 2) / 2.0 for c in merged_centers]
         log.info(f"[FontSizeClustering] Fitted centroids: {self.centroids}")
         return self
 
     def map(self, pt: float) -> float:
         """
-        将原始字号映射到最近的中心。
+        Map original font size to the nearest centroid.
         """
         if not self.centroids:
             return pt
         
-        # 找最近邻
+        # Find nearest neighbor
         closest = min(self.centroids, key=lambda c: abs(c - pt))
         return closest
 
@@ -224,7 +224,7 @@ def natural_key(s: str):
 
 def list_images_in_dir(d: str) -> List[str]:
     """
-    按自然顺序列出目录中所有图片文件路径。
+    Lists all image file paths in a directory in natural order.
     """
     exts = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
     files = [f for f in os.listdir(d) if f.lower().endswith(exts)]
@@ -259,7 +259,7 @@ def read_bgr(path: str) -> np.ndarray:
 
 def debug_dump(img: np.ndarray, tag: str = "dbg") -> None:
     """
-    将中间图像写入 DEBUG_DIR 方便调试。
+    Writes intermediate images to DEBUG_DIR for easier debugging.
     """
     os.makedirs(DEBUG_DIR, exist_ok=True)
 
@@ -282,7 +282,7 @@ def debug_dump(img: np.ndarray, tag: str = "dbg") -> None:
 
 def images_to_pdf(image_paths: Sequence[str], output_pdf_path: str) -> str:
     """
-    将一组图片导出为单个 PDF 文件。
+    Exports a set of images as a single PDF file.
     """
     imgs: List[Image.Image] = []
     for p in image_paths:
@@ -298,21 +298,21 @@ def images_to_pdf(image_paths: Sequence[str], output_pdf_path: str) -> str:
 
 def pdf_to_images(pdf_path: str, out_dir: str, dpi: int = 220) -> List[str]:
     """
-    将 PDF 每一页渲染为 PNG 图片，返回图片路径列表（按页码顺序）。
+    Renders each page of a PDF as a PNG image and returns a list of image paths (in page order).
 
-    参数
-    ----
+    Parameters
+    ----------
     pdf_path:
-        输入 PDF 文件路径。
+        Input PDF file path.
     out_dir:
-        输出图片所在目录，不存在会自动创建。
+        Directory for output images; created automatically if it doesn't exist.
     dpi:
-        渲染分辨率（每英寸像素数），默认 220。
+        Rendering resolution (pixels per inch), default 220.
 
-    返回
-    ----
+    Returns
+    -------
     List[str]
-        按页码顺序排列的 PNG 图片绝对路径列表。
+        List of absolute paths to PNG images in page order.
     """
     doc = fitz.open(pdf_path)
     out_dir_path = Path(out_dir)
@@ -406,7 +406,7 @@ def merge_lines(
     lines: Sequence[Tuple[Sequence[float], str, float]], y_tol: int = 12, x_gap: int = 18
 ):
     """
-    将OCR的word/短行合并成句子级别的行
+    Merges OCR words/short lines into sentence-level lines.
     """
     if not lines:
         return []
@@ -461,10 +461,10 @@ def text_score(lines) -> float:
 
 def paddle_ocr(bgr: np.ndarray, drop_score: int = DROP_SCORE):
     """
-    使用 PaddleOCR 识别整页图片
-    返回格式：[(bbox, text, confidence), ...]
+    Recognize full-page images using PaddleOCR
+    Return format: [(bbox, text, confidence), ...]
     bbox: [x1, y1, x2, y2]
-    注意：这里直接在 BGR 图上跑，PaddleOCR 内部会处理颜色空间。
+    Note: Runs directly on BGR image; PaddleOCR handles color space internally.
     """
     h, w = bgr.shape[:2]
 
@@ -475,7 +475,7 @@ def paddle_ocr(bgr: np.ndarray, drop_score: int = DROP_SCORE):
     if not ocr_result:
         return lines
 
-    # 通常一页对应 ocr_result[0]
+    # Usually one page corresponds to ocr_result[0]
     for line in ocr_result[0]:
         box, (text, score) = line
         if not text:
@@ -483,12 +483,12 @@ def paddle_ocr(bgr: np.ndarray, drop_score: int = DROP_SCORE):
         if score * 100.0 < drop_score:
             continue
 
-        # box 是四点多边形：[ [x1,y1], [x2,y2], [x3,y3], [x4,y4] ]
+        # box is a four-point polygon: [ [x1,y1], [x2,y2], [x3,y3], [x4,y4] ]
         xs = [p[0] for p in box]
         ys = [p[1] for p in box]
         x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
 
-        # 边界裁剪
+        # Boundary clipping
         x1 = max(0, min(w - 1, x1))
         x2 = max(0, min(w, x2))
         y1 = max(0, min(h - 1, y1))
@@ -497,7 +497,7 @@ def paddle_ocr(bgr: np.ndarray, drop_score: int = DROP_SCORE):
             continue
 
         bbox = [float(x1), float(y1), float(x2), float(y2)]
-        # 保持 0-100 置信度范围，和原 Tesseract 逻辑兼容
+        # Maintain 0-100 confidence range, compatible with original Tesseract logic
         lines.append((bbox, text.strip(), float(score * 100.0)))
 
     return lines
@@ -505,26 +505,26 @@ def paddle_ocr(bgr: np.ndarray, drop_score: int = DROP_SCORE):
 
 def paddle_ocr_page_with_layout(img_path: str) -> Dict[str, Any]:
     """
-    对单页图片执行：
-    - 读取 + 预处理(放大 + 锐化)
-    - PaddleOCR 识别
-    - 坐标从 OCR 分辨率映射回原图
-    - 行合并
-    - 正文行高估计
-    - 背景颜色估计
+    Performs on a single page image:
+    - Read + Preprocess (Upscale + Sharpen)
+    - PaddleOCR recognition
+    - Map coordinates from OCR resolution back to original image
+    - Line merging
+    - Body line height estimation
+    - Background color estimation
 
-    返回:
+    Returns:
     {
         "image_size": (w, h),
-        "lines": [(bbox, text, conf), ...],  # bbox 为原图像素坐标
-        "body_h_px": float 或 None,
-        "bg_color": (r,g,b) 或 None,
+        "lines": [(bbox, text, conf), ...],  # bbox is original image pixel coordinates
+        "body_h_px": float or None,
+        "bg_color": (r,g,b) or None,
     }
     """
     bgr = read_bgr(img_path)
     h0, w0 = bgr.shape[:2]
 
-    # 预处理
+    # Preprocessing
     ocr_img, scale = preprocess_for_ocr(bgr)
     h1, w1 = ocr_img.shape[:2]
 
@@ -533,7 +533,7 @@ def paddle_ocr_page_with_layout(img_path: str) -> Dict[str, Any]:
     # OCR
     raw_lines = paddle_ocr(ocr_img)
 
-    # 映射回原图像素坐标
+    # Map back to original image pixel coordinates
     if raw_lines and (w1 != w0 or h1 != h0):
         sx = w0 / float(w1)
         sy = h0 / float(h1)
@@ -547,7 +547,7 @@ def paddle_ocr_page_with_layout(img_path: str) -> Dict[str, Any]:
     x_gap = max(18, int(w0 * 0.01))
     lines = merge_lines(raw_lines, y_tol=y_tol, x_gap=x_gap)
 
-    # 正文行高估计
+    # Body line height estimation
     body_h_px = analyze_line_heights(lines)
 
     if not lines:
@@ -572,14 +572,14 @@ def paddle_ocr_page_with_layout_server(
     server_urls: Union[str, List[str]],
 ) -> Dict[str, Any]:
     """
-    对单页图片执行远程 OCR 处理。
+    Performs remote OCR processing on a single page image.
 
-    参数:
-        img_path: 图片路径
-        server_urls: OCR 服务器 URL 或 URL 列表
+    Parameters:
+        img_path: image path
+        server_urls: OCR server URL or list of URLs
 
-    返回:
-        同 paddle_ocr_page_with_layout
+    Returns:
+        Same as paddle_ocr_page_with_layout
     """
     if isinstance(server_urls, str):
         urls = [server_urls]
@@ -630,36 +630,36 @@ def extract_text_color(
     bgr: np.ndarray, bbox, bg_color=None
 ) -> Tuple[int, int, int]:
     """
-    从文字区域提取主色调
-    返回 (r, g, b) 元组
+    Extracts the main color tone from the text area.
+    Returns (r, g, b) tuple.
     """
     x1, y1, x2, y2 = [int(round(v)) for v in bbox]
     h, w = bgr.shape[:2]
 
-    # 边界检查
+    # Boundary check
     x1 = max(0, min(w - 1, x1))
     x2 = max(0, min(w, x2))
     y1 = max(0, min(h - 1, y1))
     y2 = max(0, min(h, y2))
 
     if x2 <= x1 or y2 <= y1:
-        return (0, 0, 0)  # 默认黑色
+        return (0, 0, 0)  # Default black
 
-    # 提取文字区域
+    # Extract text area
     region = bgr[y1:y2, x1:x2]
     if region.size == 0:
         return (0, 0, 0)
 
-    # 转换为RGB
+    # Convert to RGB
     region_rgb = cv2.cvtColor(region, cv2.COLOR_BGR2RGB)
     pixels = region_rgb.reshape(-1, 3)
 
-    # 如果像素太少，直接返回中位数颜色
+    # If pixels are too few, return median color directly
     if len(pixels) < 10:
         median_color = np.median(pixels, axis=0).astype(int)
         return tuple(int(x) for x in median_color)
 
-    # 使用K-means聚类找出主色调（2-3个聚类）
+    # Use K-means clustering to find main color tone (2-3 clusters)
     try:
         from sklearn.cluster import KMeans
 
@@ -667,12 +667,12 @@ def extract_text_color(
         kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
         kmeans.fit(pixels)
 
-        # 获取聚类中心和每个聚类的像素数
+        # Get cluster centers and pixel counts per cluster
         centers = kmeans.cluster_centers_
         labels = kmeans.labels_
         counts = np.bincount(labels)
 
-        # 如果提供了背景色，排除接近背景色的聚类
+        # If background color provided, exclude clusters close to background color
         if bg_color is not None:
             bg_array = np.array(bg_color)
             valid_centers = []
@@ -681,7 +681,7 @@ def extract_text_color(
             for i, center in enumerate(centers):
                 # 计算与背景色的距离
                 dist = np.linalg.norm(center - bg_array)
-                if dist > 30:  # 距离阈值
+                if dist > 30:  # Distance threshold
                     valid_centers.append(center)
                     valid_counts.append(counts[i])
 
@@ -689,24 +689,24 @@ def extract_text_color(
                 centers = np.array(valid_centers)
                 counts = np.array(valid_counts)
 
-        # 选择出现频率最高的颜色
+        # Select the most frequent color
         dominant_idx = np.argmax(counts)
         dominant_color = centers[dominant_idx].astype(int)
 
         return tuple(int(x) for x in dominant_color)
     except Exception:
-        # 如果sklearn不可用或出错，使用简单的中位数方法
+        # If sklearn unavailable or error, use simple median method
         median_color = np.median(pixels, axis=0).astype(int)
         return tuple(int(x) for x in median_color)
 
 
 def estimate_background_color(bgr: np.ndarray, lines):
     """
-    估计背景主色调，用于颜色提取时排除背景
+    Estimates the main color tone of the background, used to exclude background during color extraction.
     """
     h, w = bgr.shape[:2]
 
-    # 创建文字mask
+    # Create text mask
     mask = np.ones((h, w), dtype=np.uint8) * 255
     for bbox, _, _ in lines:
         x1, y1, x2, y2 = [int(round(v)) for v in bbox]
@@ -717,12 +717,12 @@ def estimate_background_color(bgr: np.ndarray, lines):
         if x2 > x1 and y2 > y1:
             mask[y1:y2, x1:x2] = 0
 
-    # 提取背景区域像素
+    # Extract background area pixels
     bg_pixels = bgr[mask > 0]
     if bg_pixels.size == 0:
         return None
 
-    # 转换为RGB并计算中位数
+    # Convert to RGB and calculate median
     bg_rgb = cv2.cvtColor(
         bg_pixels.reshape(-1, 1, 3), cv2.COLOR_BGR2RGB
     ).reshape(-1, 3)
@@ -742,7 +742,7 @@ def px_to_emu(px: float, emu_per_px: float) -> int:
 
 def analyze_line_heights(lines) -> Optional[float]:
     """
-    统计行高分布，估计"正文行高"
+    Statistics of line height distribution, estimates "body line height"
     """
     if not lines:
         return None
@@ -752,7 +752,7 @@ def analyze_line_heights(lines) -> Optional[float]:
 
 def classify_line_role(bbox, img_h_px: int, body_h_px: Optional[float]) -> str:
     """
-    大致区分：title / subtitle / body
+    Roughly distinguish: title / subtitle / body
     """
     x1, y1, x2, y2 = bbox
     h = max(1, y2 - y1)
@@ -760,7 +760,7 @@ def classify_line_role(bbox, img_h_px: int, body_h_px: Optional[float]) -> str:
         return "body"
     ratio = h / float(body_h_px)
 
-    # 位置辅助：靠近页面顶部 + 较高行
+    # Position help: near top of page + taller lines
     y_center = (y1 + y2) / 2.0
     top_region = img_h_px * 0.3
 
@@ -775,30 +775,30 @@ def estimate_font_pt(
     bbox, img_h_px: int, body_h_px: Optional[float], slide_h_in: float = SLIDE_H_IN
 ):
     """
-    根据行高按比例估计字号（改进版：移除硬编码倍率限制）
+    Estimate font size proportionally based on line height (improved version: removed hard-coded multiplier constraints)
     
-    核心思路：
-    1. 计算原图中该行的像素高度
-    2. 按比例映射到PPT的点数(pt)
-    3. 不再强制限制标题/副标题的倍率范围
+    Core Idea:
+    1. Calculate pixel height of the line in original image
+    2. Map to PPT points (pt) proportionally
+    3. No longer forcibly limit title/subtitle multiplier ranges
     """
     x1, y1, x2, y2 = bbox
     h_px = max(1, y2 - y1)
     
-    # 方法：将像素高度按图片高度比例转换为PPT点数
-    # PPT高度 = 7.5英寸 = 540pt (1英寸=72pt)
+    # Method: Convert pixel height to PPT points according to image height ratio
+    # PPT height = 7.5 inches = 540pt (1 inch = 72pt)
     slide_h_pt = slide_h_in * 72.0
     
-    # 行高占图片高度的比例
+    # Proportion of line height to image height
     height_ratio = h_px / float(img_h_px)
     
-    # 映射到PPT点数，乘以0.7是经验系数（因为行高通常大于字号）
+    # Map to PPT points, 0.7 is an empirical coefficient (as line height is usually larger than font size)
     pt = slide_h_pt * height_ratio * 0.7
     
-    # 应用全局缩放因子
+    # Apply global scale factor
     pt *= FONT_SCALE_FACTOR
     
-    # 只做合理范围限制，不再强制角色倍率
+    # Only apply reasonable range limits, no longer force role-based multipliers
     return Pt(max(8, min(96, pt)))
 
 
@@ -814,7 +814,7 @@ def add_background(
 
 def build_text_mask_from_lines(bgr: np.ndarray, lines) -> np.ndarray:
     """
-    根据OCR行框生成初始mask（粗略矩形）
+    Generates initial mask from OCR line boxes (rough rectangles)
     """
     h, w = bgr.shape[:2]
     mask = np.zeros((h, w), dtype=np.uint8)
@@ -838,8 +838,8 @@ def build_text_mask_from_lines(bgr: np.ndarray, lines) -> np.ndarray:
 
 def build_adaptive_mask(bgr: np.ndarray, lines) -> np.ndarray:
     """
-    使用自适应方法生成更精细的文字主mask
-    结合OCR bbox和实际文字形状（内部边缘 + 阈值）
+    Generates a finer main text mask using an adaptive method
+    Combines OCR bbox and actual text shapes (internal edges + threshold)
     """
     h, w = bgr.shape[:2]
     mask = np.zeros((h, w), dtype=np.uint8)
@@ -860,19 +860,19 @@ def build_adaptive_mask(bgr: np.ndarray, lines) -> np.ndarray:
             continue
 
         try:
-            # 先看局部对比度
+            # Check local contrast first
             if np.var(region) < 100:
-                # 对比度很低，优先用 Canny 边缘找笔画
+                # Contrast is very low, prioritize using Canny edges to find strokes
                 edges = cv2.Canny(region, 50, 150)
                 kernel = np.ones((2, 2), np.uint8)
                 binary = cv2.dilate(edges, kernel, iterations=1)
             else:
-                # 对比度正常，用阈值法
+                # Normal contrast, use thresholding
                 if region.shape[0] < 20 or region.shape[1] < 20:
                     _, binary = cv2.threshold(
                         region, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
                     )
-                    binary = 255 - binary  # 反色：文字为白
+                    binary = 255 - binary  # Invert: text becomes white
                 else:
                     binary = cv2.adaptiveThreshold(
                         region,
@@ -898,10 +898,10 @@ def build_adaptive_mask(bgr: np.ndarray, lines) -> np.ndarray:
 
 def is_simple_background_region(bgr: np.ndarray, mask: np.ndarray) -> bool:
     """
-    简单判定：mask 区域附近背景是否接近纯色（方差较小）
+    Simple determination: whether the background near the mask area is approximately solid (low variance)
     """
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    # 扩大一点范围取邻域
+    # Expand range slightly to get neighborhood
     dilated = cv2.dilate((mask > 0).astype(np.uint8), np.ones((5, 5), np.uint8), iterations=1)
     region = gray[dilated > 0]
     if region.size == 0:
@@ -912,8 +912,8 @@ def is_simple_background_region(bgr: np.ndarray, mask: np.ndarray) -> bool:
 
 def fill_with_neighbor(bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """
-    对复杂背景时，优先用邻域像素粗略填充，再交给 inpaint 做平滑，
-    避免 NS/TELEA 在大块区域产生奇怪纹理。
+    For complex backgrounds, prioritize rough filling with neighborhood pixels, then hand over to inpaint for smoothing,
+    avoiding strange textures generated by NS/TELEA in large areas.
     """
     result = bgr.copy()
     h, w = mask.shape
@@ -934,30 +934,30 @@ def fill_with_neighbor(bgr: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 def make_clean_background(bgr: np.ndarray, lines) -> np.ndarray:
     """
-    使用改进的 inpaint 生成“无字版底图”：
-    - 自适应主文字 mask
-    - 扩展阴影/发光区域 mask 只用于 inpaint
-    - 简单背景直接 inpaint，复杂背景先邻域填充再小半径 inpaint
+    Generates a "clean background version" using improved inpaint:
+    - Adaptive main text mask
+    - Expanded shadow/glow area mask used only for inpaint
+    - Direct inpaint for simple backgrounds, neighborhood fill then small-radius inpaint for complex backgrounds
     """
     if not lines:
         return bgr
 
-    # 使用自适应或简单mask（主文字区域）
+    # Use adaptive or simple mask (main text area)
     if USE_ADAPTIVE_MASK:
         main_mask = build_adaptive_mask(bgr, lines)
     else:
         main_mask = build_text_mask_from_lines(bgr, lines)
 
-    # 扩展阴影/发光区域，inpaint 时用这个大 mask
+    # Expand shadow/glow area, use this large mask during inpaint
     shadow_mask = cv2.dilate(main_mask, np.ones((7, 7), np.uint8), iterations=2)
 
     is_simple = is_simple_background_region(bgr, shadow_mask)
 
     if is_simple:
-        # 简单背景：直接 inpaint + 轻微模糊
+        # Simple background: direct inpaint + slight blur
         clean = cv2.inpaint(bgr, shadow_mask, INPAINT_RADIUS, cv2.INPAINT_TELEA)
     else:
-        # 复杂背景：先用邻域像素粗填，再用小半径 NS 微调
+        # Complex background: rough fill with neighborhood pixels, then fine-tune with small-radius NS
         prefilled = fill_with_neighbor(bgr, shadow_mask)
         clean = cv2.inpaint(
             prefilled, shadow_mask, max(3, INPAINT_RADIUS // 2), cv2.INPAINT_NS
@@ -965,7 +965,7 @@ def make_clean_background(bgr: np.ndarray, lines) -> np.ndarray:
 
     clean = cv2.GaussianBlur(clean, (3, 3), 0.5)
 
-    # 只在 shadow_mask 区域应用 inpaint 结果
+    # Apply inpaint result only to shadow_mask area
     result = bgr.copy()
     mask_3ch = cv2.cvtColor(shadow_mask, cv2.COLOR_GRAY2BGR) / 255.0
     result = (clean * mask_3ch + bgr * (1 - mask_3ch)).astype(np.uint8)
@@ -981,10 +981,10 @@ def ocr_images_to_ppt(
     use_text_color: bool = EXTRACT_TEXT_COLOR,
 ) -> str:
     """
-    将图片通过OCR转换为可编辑文字的PPT（优化版）
+    Converts images to PPT with editable text via OCR (Optimized version)
 
-    注意：该函数为内部实现，推荐通过 images_to_pdf_and_ppt /
-    convert_images_dir_to_pdf_and_ppt 间接调用。
+    Note: This function is an internal implementation; recommended to call indirectly via
+    images_to_pdf_and_ppt / convert_images_dir_to_pdf_and_ppt.
     """
     prs = Presentation()
     prs.slide_width = Inches(SLIDE_W_IN)
@@ -998,7 +998,7 @@ def ocr_images_to_ppt(
 
         bgr = read_bgr(img_path)
 
-        # 预处理：放大和锐化
+        # Preprocessing: upscale and sharpen
         ocr_img, scale = preprocess_for_ocr(bgr)
 
         if idx <= DEBUG_DUMP_FIRST_N:
@@ -1006,16 +1006,16 @@ def ocr_images_to_ppt(
             debug_dump(ocr_img, f"before_ocr_up_{idx}")
             log.info(f"slide#{idx} upscale scale={scale:.3f}")
 
-        h0, w0 = bgr.shape[:2]  # 原图尺寸
-        h1, w1 = ocr_img.shape[:2]  # OCR输入尺寸
+        h0, w0 = bgr.shape[:2]  # Original size
+        h1, w1 = ocr_img.shape[:2]  # OCR input size
 
-        # 创建幻灯片
-        slide = prs.slides.add_slide(prs.slide_layouts[6])  # 空白布局
+        # Create slide
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank layout
 
-        # OCR识别（PaddleOCR 直接处理 BGR 图像）
+        # OCR recognition (PaddleOCR handles BGR images directly)
         lines = paddle_ocr(ocr_img)
 
-        # 把bbox从OCR图坐标缩回原图坐标
+        # Scale bbox from OCR image coordinates back to original image coordinates
         if lines and (w1 != w0 or h1 != h0):
             sx = w0 / float(w1)
             sy = h0 / float(h1)
@@ -1024,12 +1024,12 @@ def ocr_images_to_ppt(
                 for (b, t, c) in lines
             ]
 
-        # 再合并一轮
+        # Merge lines again
         y_tol = max(12, int(h0 * 0.008))
         x_gap = max(18, int(w0 * 0.01))
         lines = merge_lines(lines, y_tol=y_tol, x_gap=x_gap)
 
-        # 统计正文行高，用于后续字号估计
+        # Statistics of body line height for subsequent font size estimation
         body_h_px = analyze_line_heights(lines)
 
         if not lines:
@@ -1037,14 +1037,14 @@ def ocr_images_to_ppt(
         else:
             log.info(f"slide#{idx} detected {len(lines)} text boxes")
 
-        # 估计背景颜色（用于颜色提取）
+        # Estimate background color (for color extraction)
         bg_color = None
         if use_text_color and lines:
             bg_color = estimate_background_color(bgr, lines)
             if bg_color:
                 log.info(f"slide#{idx} estimated background color: RGB{bg_color}")
 
-        # 底图处理：可选 inpaint 生成"干净底图"
+        # Background processing: optional inpaint to generate "clean background"
         bg_for_slide = bgr
         if add_background_image:
             if clean_background and lines:
@@ -1076,38 +1076,38 @@ def ocr_images_to_ppt(
             left = px_to_emu(x1, scale_x)
             top = px_to_emu(y1, scale_y)
 
-            # 添加透明文本框
+            # Add transparent textbox
             tb = slide.shapes.add_textbox(left, top, int(width), int(height))
             tf = tb.text_frame
             tf.clear()
-            tf.word_wrap = False  # 禁用自动换行
+            tf.word_wrap = False  # Disable auto-wrap
 
-            # 垂直居中（可选）
+            # Vertical center (optional)
             tf.vertical_anchor = MSO_ANCHOR.MIDDLE
 
-            # 设置文本框透明
-            tb.fill.background()  # 无填充
-            tb.line.fill.background()  # 无边框
+            # Set textbox transparency
+            tb.fill.background()  # No fill
+            tb.line.fill.background()  # No border
 
             p = tf.paragraphs[0]
             p.text = text
 
-            # 使用原生分散对齐：多字符分散，单字符居中
+            # Use native distributed alignment: distributed for multi-character, centered for single
             if len(text) > 1:
                 p.alignment = PP_ALIGN.DISTRIBUTE
             else:
                 p.alignment = PP_ALIGN.CENTER
 
-            # 不再依赖 font.spacing 模拟分散，统一设为 0
+            # No longer rely on font.spacing for distribution, uniformly set to 0
             p.font.size = font_size
             p.font.spacing = Pt(0)
 
-            # 提取并设置文字颜色
+            # Extract and set text color
             if use_text_color:
                 text_color = extract_text_color(bgr, bbox, bg_color)
                 p.font.color.rgb = RGBColor(*text_color)
             else:
-                # 默认黑色
+                # Default black
                 p.font.color.rgb = RGBColor(0, 0, 0)
 
     prs.save(output_pptx)
@@ -1128,21 +1128,21 @@ def images_to_pdf_and_ppt(
     extract_text_color: bool = EXTRACT_TEXT_COLOR,
 ) -> Dict[str, Optional[str]]:
     """
-    将给定的一组图片转换为 PDF 和可编辑 PPTX。
+    Converts a given sequence of images to PDF and editable PPTX.
 
-    参数:
-        image_paths: 按页面顺序排列的图片路径列表。
-        output_pdf_path: 输出 PDF 文件路径，若为 None 则不生成 PDF。
-        output_pptx_path: 输出 PPTX 文件路径，若为 None 则不生成 PPT。
-        add_background_image: 是否在 PPT 中加入整页背景图。
-        clean_background: 是否对背景进行 inpaint 处理（在 add_background_image 为 True 时生效）。
-        extract_text_color: 是否根据原图估计文字颜色，用于 PPT 文本着色。
+    Parameters:
+        image_paths: List of image paths in page order.
+        output_pdf_path: Output PDF file path; no PDF generated if None.
+        output_pptx_path: Output PPTX file path; no PPT generated if None.
+        add_background_image: Whether to add full-page background images to PPT.
+        clean_background: Whether to perform inpaint on background (effective when add_background_image is True).
+        extract_text_color: Whether to estimate text color based on the original image for PPT text coloring.
 
-    返回:
-        包含已生成文件路径的字典，例如:
+    Returns:
+        Dictionary containing generated file paths, e.g.:
         {
-            "pdf": "/path/to/output.pdf" 或 None,
-            "pptx": "/path/to/output_editable.pptx" 或 None,
+            "pdf": "/path/to/output.pdf" or None,
+            "pptx": "/path/to/output_editable.pptx" or None,
         }
     """
     result: Dict[str, Optional[str]] = {"pdf": None, "pptx": None}
@@ -1171,14 +1171,14 @@ def convert_images_dir_to_pdf_and_ppt(
     extract_text_color: bool = EXTRACT_TEXT_COLOR,
 ) -> Dict[str, Optional[str]]:
     """
-    给定图片目录，自动读取所有图片并生成 PDF + PPTX。
+    Automatically reads all images from a directory and generates PDF + PPTX.
 
-    参数:
-        input_dir: 包含图片的目录，内部按文件名自然排序。
-        其余参数同 images_to_pdf_and_ppt。
+    Parameters:
+        input_dir: Directory containing images, naturally sorted by filename internally.
+        Other parameters same as images_to_pdf_and_ppt.
 
-    返回:
-        同 images_to_pdf_and_ppt。
+    Returns:
+        Same as images_to_pdf_and_ppt.
     """
     image_paths = list_images_in_dir(input_dir)
     if not image_paths:
@@ -1207,35 +1207,35 @@ async def convert_images_dir_to_pdf_and_ppt_api(
     use_text_color: bool = EXTRACT_TEXT_COLOR,
 ) -> Dict[str, Optional[str]]:
     """
-    带 API inpainting 支持的图片转 PDF/PPTX 函数（异步版本）
+    Image to PDF/PPTX conversion with API inpainting support (async version)
     
-    与 convert_images_dir_to_pdf_and_ppt 的区别：
-    - 支持使用图像编辑 API 进行 inpainting（优先）
-    - API 失败时自动 fallback 到传统 OpenCV inpaint
-    - 支持重试机制（最多3次）
+    Difference from convert_images_dir_to_pdf_and_ppt:
+    - Supports using image editing API for inpainting (priority)
+    - Automatically falls back to traditional OpenCV inpaint when API fails
+    - Supports retry mechanism (up to 3 times)
     
-    参数:
-        input_dir: 包含图片的目录，内部按文件名自然排序
-        output_pdf_path: 输出 PDF 文件路径，若为 None 则不生成 PDF
-        output_pptx_path: 输出 PPTX 文件路径，若为 None 则不生成 PPT
-        api_url: 图像编辑 API 的 URL
-        api_key: API 密钥
-        model: 使用的模型名称
-        use_api_inpaint: 是否启用 API inpainting（默认 True）
-        add_background_image: 是否在 PPT 中加入整页背景图
-        clean_background: 是否对背景进行 inpaint 处理
-        extract_text_color: 是否根据原图估计文字颜色
+    Parameters:
+        input_dir: Directory containing images, naturally sorted by filename internally
+        output_pdf_path: Output PDF file path; no PDF generated if None
+        output_pptx_path: Output PPTX file path; no PPT generated if None
+        api_url: URL for image editing API
+        api_key: API Key
+        model: Model name to use
+        use_api_inpaint: Whether to enable API inpainting (default True)
+        add_background_image: Whether to add full-page background images to PPT
+        clean_background: Whether to perform inpaint on background
+        extract_text_color: Whether to estimate text color based on original image
     
-    返回:
-        包含已生成文件路径的字典
+    Returns:
+        Dictionary containing generated file paths
     """
     import asyncio
     from workflow_engine.toolkits.multimodaltool.req_img import generate_or_edit_and_save_image_async
 
     image_paths = list_images_in_dir(input_dir)
 
-    # 过滤掉版本化的历史文件（如 page_000_v001.png），只保留当前版本（page_000.png）
-    # 版本化文件的命名模式：page_XXX_vYYY.png
+    # Filter out versioned history files (e.g., page_000_v001.png), keep only the current version (page_000.png)
+    # Versioned filename pattern: page_XXX_vYYY.png
     version_pattern = re.compile(r'_v\d+\.(png|jpg|jpeg|bmp|tif|tiff)$', re.IGNORECASE)
     image_paths = [p for p in image_paths if not version_pattern.search(os.path.basename(p))]
 
@@ -1244,11 +1244,11 @@ async def convert_images_dir_to_pdf_and_ppt_api(
 
     result: Dict[str, Optional[str]] = {"pdf": None, "pptx": None}
     
-    # 生成 PDF
+    # Generate PDF
     if output_pdf_path is not None:
         result["pdf"] = images_to_pdf(image_paths, output_pdf_path)
     
-    # 生成 PPTX（带 API inpainting 支持）
+    # Generate PPTX (with API inpainting support)
     if output_pptx_path is not None:
         prs = Presentation()
         prs.slide_width = Inches(SLIDE_W_IN)
@@ -1268,10 +1268,10 @@ async def convert_images_dir_to_pdf_and_ppt_api(
             
             slide = prs.slides.add_slide(prs.slide_layouts[6])
             
-            # OCR 识别
+            # OCR Recognition
             lines = paddle_ocr(ocr_img)
             
-            # 坐标映射
+            # Coordinate mapping
             if lines and (w1 != w0 or h1 != h0):
                 sx = w0 / float(w1)
                 sy = h0 / float(h1)
@@ -1280,7 +1280,7 @@ async def convert_images_dir_to_pdf_and_ppt_api(
                     for (b, t, c) in lines
                 ]
             
-            # 合并行
+            # Merge lines
             y_tol = max(12, int(h0 * 0.008))
             x_gap = max(18, int(w0 * 0.01))
             lines = merge_lines(lines, y_tol=y_tol, x_gap=x_gap)
@@ -1288,11 +1288,11 @@ async def convert_images_dir_to_pdf_and_ppt_api(
             body_h_px = analyze_line_heights(lines)
             bg_color = estimate_background_color(bgr, lines) if use_text_color and lines else None
             
-            # 底图处理：优先使用 API inpainting
+            # Background processing: prioritise using API inpainting
             bg_for_slide = bgr
             if add_background_image:
                 if clean_background and lines and use_api_inpaint and api_url and api_key and model:
-                    # 使用 API inpainting（带重试）
+                    # Use API inpainting (with retry)
                     async def _call_inpaint_api_with_retry(retries: int = 3, delay: float = 1.0) -> bool:
                         last_err: Optional[Exception] = None
                         for attempt in range(1, retries + 1):
@@ -1320,45 +1320,45 @@ async def convert_images_dir_to_pdf_and_ppt_api(
                         return False
                     
                     try:
-                        # 生成文字掩码
+                        # Generate text mask
                         text_mask = build_adaptive_mask(bgr, lines)
                         
-                        # 保存临时文件
+                        # Save temporary files
                         import tempfile
                         with tempfile.TemporaryDirectory() as tmpdir:
                             temp_img_path = os.path.join(tmpdir, f"temp_{idx}.png")
                             clean_bg_path = os.path.join(tmpdir, f"clean_{idx}.png")
                             cv2.imwrite(temp_img_path, bgr)
                             
-                            # 构造 inpainting 提示词
-                            inpaint_prompt = "请智能修复图像中文字被移除后的区域，保持背景的连续性、一致性和自然过渡，使修复后的图像看起来完整无缺，并且原图涉及的图标你需要尽量保留；"
+                            # Construct inpainting prompt
+                            inpaint_prompt = "Please intelligently repair the area after text is removed from the image, maintaining continuity, consistency, and natural transition of the background, so that the repaired image looks complete, and you should try to preserve the icons involved in the original image as much as possible;"
                             
-                            log.info(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} 开始调用图像编辑API进行inpainting（最多重试3次）...")
+                            log.info(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} Starting to call image editing API for inpainting (max 3 retries)...")
                             
                             api_success = await _call_inpaint_api_with_retry(retries=3, delay=1.0)
                             
                             if api_success and os.path.exists(clean_bg_path):
                                 bg_for_slide = read_bgr(clean_bg_path)
-                                log.info(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} API inpainting成功")
+                                log.info(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} API inpainting successful")
                             else:
-                                log.warning(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} API inpainting失败，使用本地inpaint")
+                                log.warning(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} API inpainting failed, using local inpaint")
                                 bg_for_slide = make_clean_background(bgr, lines)
                     except Exception as e:
-                        log.error(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} inpainting流程失败: {e}，使用本地inpaint")
+                        log.error(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} inpainting process failed: {e}, using local inpaint")
                         try:
                             bg_for_slide = make_clean_background(bgr, lines)
                         except Exception as e2:
-                            log.error(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} 本地inpaint也失败: {e2}，使用原图")
+                            log.error(f"[convert_images_dir_to_pdf_and_ppt_api] slide#{idx} local inpaint also failed: {e2}, using original image")
                             bg_for_slide = bgr
                 elif clean_background and lines:
-                    # 不使用 API，直接使用本地 inpaint
+                    # Not using API, use local inpaint directly
                     log.info(f"slide#{idx} applying local inpainting...")
                     bg_for_slide = make_clean_background(bgr, lines)
                 
                 tmp = f"__ppt_bg_{idx}.png"
                 add_background(slide, bg_for_slide, slide_w_emu, slide_h_emu, tmp)
             
-            # 添加文本框（与原函数相同的逻辑）
+            # Add textboxes (same logic as main function)
             scale_x = slide_w_emu / w0
             scale_y = slide_h_emu / h0
             
@@ -1383,13 +1383,13 @@ async def convert_images_dir_to_pdf_and_ppt_api(
                 tb.fill.background()
                 tb.line.fill.background()
 
-                # 垂直居中（可选）
+                # Vertical center (optional)
                 tf.vertical_anchor = MSO_ANCHOR.MIDDLE
 
                 p = tf.paragraphs[0]
                 p.text = text
 
-                # 使用原生分散对齐
+                # Use native distributed alignment
                 if len(text) > 1:
                     p.alignment = PP_ALIGN.DISTRIBUTE
                 else:
@@ -1412,29 +1412,29 @@ async def convert_images_dir_to_pdf_and_ppt_api(
 
 if __name__ == "__main__":
     """
-    简单本地测试入口：
-    - 直接运行本文件即可测试 PaddleOCR 对指定图片的识别效果
-    - 识别结果会打印在终端，并把画好检测框的图片保存到指定路径
+    Simple local test entry:
+    - Run this file directly to test PaddleOCR recognition on specified images
+    - Recognition results will be printed to terminal, and images with bounding boxes will be saved to specified path
     """
-    # 测试图片路径（也是可视化输出路径）
+    # Test image path (also visualization output path)
     img_path = f"{get_project_root()}/tests/fig_1767604887.png"
 
     if not os.path.exists(img_path):
-        raise FileNotFoundError(f"测试图片不存在: {img_path}")
+        raise FileNotFoundError(f"Test image does not exist: {img_path}")
 
-    # 调用封装好的单页接口
+    # Call encapsulated single-page interface
     info = paddle_ocr_page_with_layout(img_path)
 
-    print("=== PaddleOCR 测试结果 ===")
+    print("=== PaddleOCR Test Results ===")
     print(f"image_size: {info['image_size']}")
     print(f"body_h_px: {info['body_h_px']}")
     print(f"bg_color: {info['bg_color']}")
-    print(f"检测到文本框数量: {len(info['lines'])}")
+    print(f"Number of text boxes detected: {len(info['lines'])}")
 
     for i, (bbox, text, conf) in enumerate(info["lines"], start=1):
         print(f"[{i:02d}] conf={conf:.1f} bbox={bbox} text={text}")
 
-    # 把检测框画在图上，并保存到文件，而不是弹出窗口
+    # Draw bounding boxes on the image and save to file instead of popping up a window
     try:
         bgr = read_bgr(img_path)
         vis = bgr.copy()
@@ -1445,9 +1445,9 @@ if __name__ == "__main__":
         save_path = f"{get_project_root()}/tests/test_01_paddle_frame.png"
         ok = cv2.imwrite(save_path, vis)
         if ok:
-            log.info(f"PaddleOCR 可视化结果已保存到: {save_path}")
+            log.info(f"PaddleOCR visualization result saved to: {save_path}")
         else:
-            log.warning(f"PaddleOCR 可视化结果保存失败: {save_path}")
+            log.warning(f"Failed to save PaddleOCR visualization result: {save_path}")
     except Exception as e:
-        log.warning(f"可视化失败: {e}")
-        # 不影响纯文本打印结果
+        log.warning(f"Visualization failed: {e}")
+        # Does not affect plain text printing results

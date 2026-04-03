@@ -68,7 +68,7 @@ def _outputs_dir(email: str, notebook_id: Optional[str], subdir: str) -> Path:
 
 
 def _get_cjk_font_path() -> Optional[str]:
-    """返回系统中文字体路径，用于 PDF 内中文显示；无则返回 None。"""
+    """Returns system CJK font path for displaying Chinese in PDFs; returns None if not found."""
     candidates = [
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
@@ -81,7 +81,7 @@ def _get_cjk_font_path() -> Optional[str]:
 
 
 def _text_to_pdf(text: str, output_path: str) -> None:
-    """将长文本生成为多页 PDF（PyMuPDF），不依赖 kb_page_content / paper2ppt workflow。支持中文（CJK 字体）。"""
+    """Generates a multi-page PDF (PyMuPDF) from long text, independent of kb_page_content / paper2ppt workflow. Supports CJK fonts."""
     text = (text or "").strip()
     if not text:
         raise ValueError("Report text is empty")
@@ -92,7 +92,7 @@ def _text_to_pdf(text: str, output_path: str) -> None:
     fontfile = _get_cjk_font_path()
     fontname = "notocjk" if fontfile else "helv"
     if fontfile:
-        # 使用中文字体，否则中文会不显示
+        # Use CJK font, otherwise Chinese characters won't display
         pass
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     if not paragraphs:
@@ -136,31 +136,31 @@ def _find_mineru_stem_dir(
     notebook_title: Optional[str] = None,
 ) -> Optional[Path]:
     """
-    查找指定 pdf_stem 的 MinerU 输出目录。
-    查找顺序：
-    1. 笔记本新布局: outputs/{title}_{id}/sources/{pdf_stem}/mineru/
-    2. kb_mineru 新结构: kb_mineru/{email}/{notebook_id}/{pdf_stem}/auto/
-    3. kb_mineru 旧结构: kb_mineru/{email}/{notebook_id}/{uuid}/{pdf_stem}/auto/
-    返回包含 auto/ 或 hybrid_auto/ 的目录，找不到返回 None。
+    Find the MinerU output directory for a specific pdf_stem.
+    Search order:
+    1. New notebook layout: outputs/{title}_{id}/sources/{pdf_stem}/mineru/
+    2. New kb_mineru structure: kb_mineru/{email}/{notebook_id}/{pdf_stem}/auto/
+    3. Legacy kb_mineru structure: kb_mineru/{email}/{notebook_id}/{uuid}/{pdf_stem}/auto/
+    Returns directory containing auto/ or hybrid_auto/, otherwise returns None.
     """
     project_root = get_project_root()
 
-    # 1) 笔记本新布局: outputs/{title}_{id}/sources/{pdf_stem}/mineru/
+    # 1) New notebook layout: outputs/{title}_{id}/sources/{pdf_stem}/mineru/
     if notebook_id:
         nb_paths = get_notebook_paths(notebook_id, notebook_title or "", email)
         mineru_dir = nb_paths.sources_dir / pdf_stem / "mineru"
         if mineru_dir.exists():
-            # 直接在 mineru/ 下找 auto/ 或 hybrid_auto/
+            # Search for auto/ or hybrid_auto/ directly under mineru/
             for sub in ("auto", "hybrid_auto"):
                 if (mineru_dir / sub).is_dir() and list((mineru_dir / sub).glob("*.md")):
-                    log.info("[find_mineru] 在新布局找到缓存: %s/%s", mineru_dir, sub)
+                    log.info("[find_mineru] Found cache in new layout: %s/%s", mineru_dir, sub)
                     return mineru_dir
-            # 兼容: mineru/{pdf_stem}/auto/ (MinerU 可能多嵌套一层)
+            # Compatibility: mineru/{pdf_stem}/auto/ (MinerU may have an extra nested layer)
             nested = mineru_dir / pdf_stem
             if nested.exists():
                 for sub in ("auto", "hybrid_auto"):
                     if (nested / sub).is_dir() and list((nested / sub).glob("*.md")):
-                        log.info("[find_mineru] 在新布局(嵌套)找到缓存: %s/%s", nested, sub)
+                        log.info("[find_mineru] Found cache in new layout (nested): %s/%s", nested, sub)
                         return nested
 
     # 2) Legacy: kb_mineru/{email}/{notebook_id}/
@@ -177,7 +177,7 @@ def _find_mineru_stem_dir(
             if (stem_dir / sub).is_dir() and list((stem_dir / sub).glob("*.md")):
                 return stem_dir
 
-    # 3) 旧结构兼容：kb_mineru/{email}/{nb}/{uuid}/{pdf_stem}/auto/
+    # 3) Legacy structure compatibility: kb_mineru/{email}/{nb}/{uuid}/{pdf_stem}/auto/
     for child in mineru_base.iterdir():
         if not child.is_dir():
             continue
@@ -199,8 +199,8 @@ def _read_mineru_md_if_cached(
     notebook_title: Optional[str] = None,
 ) -> Optional[str]:
     """
-    尝试从已有的 MinerU 缓存中读取 markdown 内容。
-    找到则返回 markdown 文本，否则返回 None。
+    Attempt to read markdown content from existing MinerU cache.
+    Returns markdown text if found, otherwise returns None.
     """
     stem_dir = _find_mineru_stem_dir(pdf_path.stem, email, notebook_id, notebook_title)
     if stem_dir is None:
@@ -215,10 +215,10 @@ def _read_mineru_md_if_cached(
             try:
                 text = md_files[0].read_text(encoding="utf-8")
                 if text.strip():
-                    log.info("[read_mineru_md] 从缓存读取 %s, len=%s", md_files[0], len(text))
+                    log.info("[read_mineru_md] Read from cache %s, len=%s", md_files[0], len(text))
                     return text[:max_chars] if len(text) > max_chars else text
             except Exception as e:
-                log.warning("[read_mineru_md] 读取失败 %s: %s", md_files[0], e)
+                log.warning("[read_mineru_md] Read failed %s: %s", md_files[0], e)
     return None
 
 
@@ -230,37 +230,37 @@ def _reuse_mineru_cache(
     notebook_title: Optional[str] = None,
 ) -> int:
     """
-    将已有的 MinerU 解析结果复制/软链到 PPT workflow 的 output_dir 下，
-    使 parse_pdf_pages 能直接发现 {output_dir}/{pdf_stem}/auto/*.md 而跳过重新解析。
-    返回成功复用的 PDF 数量。
+    Copy/symlink existing MinerU parsing results to PPT workflow's output_dir,
+    allowing parse_pdf_pages to find {output_dir}/{pdf_stem}/auto/*.md and skip re-parsing.
+    Returns the number of successfully reused PDFs.
     """
     reused = 0
     for pdf_path in pdf_paths:
         stem = pdf_path.stem
         cached_stem_dir = _find_mineru_stem_dir(stem, email, notebook_id, notebook_title)
         if cached_stem_dir is None:
-            log.info("[reuse_mineru] 未找到 %s 的 MinerU 缓存", stem)
+            log.info("[reuse_mineru] No MinerU cache found for %s", stem)
             continue
 
         target = output_dir / stem
         if target.exists():
-            # 已存在（可能之前已复用或本次 workflow 已生成），跳过
-            log.info("[reuse_mineru] 目标已存在，跳过: %s", target)
+            # Already exists (possibly reused before or generated in this workflow), skip
+            log.info("[reuse_mineru] Target already exists, skipping: %s", target)
             reused += 1
             continue
 
         try:
             target.symlink_to(cached_stem_dir.resolve())
-            log.info("[reuse_mineru] 软链成功: %s -> %s", target, cached_stem_dir)
+            log.info("[reuse_mineru] Symlink successful: %s -> %s", target, cached_stem_dir)
             reused += 1
         except OSError:
-            # 软链失败（跨文件系统等），回退到复制
+            # Symlink failed (cross-filesystem, etc.), fallback to copy
             try:
                 shutil.copytree(str(cached_stem_dir), str(target))
-                log.info("[reuse_mineru] 复制成功: %s -> %s", target, cached_stem_dir)
+                log.info("[reuse_mineru] Copy successful: %s -> %s", target, cached_stem_dir)
                 reused += 1
             except Exception as e:
-                log.warning("[reuse_mineru] 复制失败 %s: %s", stem, e)
+                log.warning("[reuse_mineru] Copy failed %s: %s", stem, e)
 
     return reused
 
@@ -273,7 +273,7 @@ def _resolve_local_path(path_or_url: str) -> Path:
     if not p.is_absolute():
         p = (get_project_root() / p).resolve()
     elif not p.exists():
-        # 前端可能传了带 /outputs/ 的绝对形式，在服务端需按 project_root 解析（并解码 %40）
+        # Frontend may pass absolute forms with /outputs/; parse relative to project_root (and decode %40)
         raw_stripped = unquote(raw.lstrip("/"))
         if raw_stripped:
             p_rel = (get_project_root() / raw_stripped).resolve()
@@ -398,11 +398,13 @@ async def upload_kb_file(
             try:
                 vector_base = str(paths.vector_store_dir)
                 mineru_base = str(paths.source_mineru_dir(filename))
-                file_list = [{"path": str(source_info.original_path)}]
+                # Explicitly override with local CPU engine (Free/Private)
+                local_model = os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
                 await process_knowledge_base_files(
-                    file_list=file_list,
+                    file_list=[{"path": str(source_info.original_path)}],
                     base_dir=vector_base,
                     mineru_output_base=mineru_base,
+                    model_name=local_model
                 )
                 embedded = True
                 log.info("[upload] auto-embedding done: %s", filename)
@@ -440,16 +442,16 @@ async def upload_kb_file(
 
 
 def _sanitize_md_filename(title: str, prefix: str = "doc") -> str:
-    """生成安全的 .md 文件名，避免路径注入与非法字符。"""
-    safe = re.sub(r'[^\w\u4e00-\u9fff\s\-.]', "", (title or "").strip())
+    """Generate safe .md filename, avoiding path injection and illegal characters."""
+    safe = re.sub(r'[^\w\s\-.]', "", (title or "").strip())
     safe = (safe or prefix)[:80].strip() or prefix
     return safe + f"_{int(time.time())}.md"
 
 
 def _url_to_pdf(url: str, output_path: Path, timeout_ms: int = 30000) -> None:
     """
-    使用 Playwright 打开 URL 并打印为 PDF，便于后续统一走 MinerU。
-    若 Playwright 未安装或失败，抛出异常。
+    Use Playwright to open URL and print to PDF for subsequent MinerU processing.
+    Throws exception if Playwright is not installed or fails.
     """
     from playwright.sync_api import sync_playwright
     url = (url or "").strip()
@@ -473,11 +475,11 @@ async def add_text_source(
     email: str = Body(..., embed=True),
     user_id: Optional[str] = Body(None, embed=True),
     notebook_title: Optional[str] = Body(None, embed=True),
-    title: str = Body("直接输入", embed=True),
+    title: str = Body("Direct Entry", embed=True),
     content: str = Body(..., embed=True),
 ) -> Dict[str, Any]:
     """
-    将纯文本保存为笔记本内的 .md 文件并作为来源。用于「直接输入」引入。
+    Save plain text as a .md file within the notebook and use as source. Used for "Direct Entry".
     New layout: outputs/{title}_{id}/sources/{stem}/
     """
     if not notebook_id or not email:
@@ -493,7 +495,7 @@ async def add_text_source(
     # Legacy compat
     user_dir = _notebook_dir(email, notebook_id)
     user_dir.mkdir(parents=True, exist_ok=True)
-    legacy_filename = _sanitize_md_filename(title, "直接输入")
+    legacy_filename = _sanitize_md_filename(title, "Direct Entry")
     legacy_path = user_dir / legacy_filename
     if not legacy_path.exists():
         try:
@@ -504,6 +506,18 @@ async def add_text_source(
     project_root = get_project_root()
     rel = source_info.original_path.relative_to(project_root)
     static_path = "/" + rel.as_posix()
+
+    # Auto-embed
+    try:
+        local_model = os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        await process_knowledge_base_files(
+            file_list=[{"path": str(source_info.original_path)}],
+            base_dir=str(paths.vector_store_dir),
+            mineru_output_base=str(paths.source_mineru_dir(source_info.original_path.name)),
+            model_name=local_model
+        )
+    except Exception as e:
+        log.warning("[add-text-source] embedding failed: %s", e)
 
     from fastapi_app.kb_records import add_source_record
     try:
@@ -538,7 +552,7 @@ async def import_url_as_source(
     url: str = Body(..., embed=True),
 ) -> Dict[str, Any]:
     """
-    抓取 URL 网页正文存为 .md 文件，作为来源。
+    Fetch URL page text and save as .md file, using as source.
     New layout: outputs/{title}_{id}/sources/{stem}/
     """
     if not notebook_id or not email:
@@ -550,18 +564,18 @@ async def import_url_as_source(
     # Fetch page text
     try:
         text = await asyncio.to_thread(fetch_page_text, url)
-        if not text or text.startswith("[抓取失败"):
+        if not text or text.startswith("[Fetch failed"):
             raise RuntimeError(text or "fetch_page_text returned empty")
     except Exception as e:
         log.warning("fetch_page_text failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"网页抓取失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Web page fetch failed: {e}")
 
     # Parse title from URL
     try:
         parsed = urlparse(url)
-        title = (parsed.netloc or "网页") + "_" + (parsed.path.strip("/") or "page")[:30]
+        title = (parsed.netloc or "Web Page") + "_" + (parsed.path.strip("/") or "page")[:30]
     except Exception:
-        title = "网页"
+        title = "Web Page"
 
     # New layout
     paths = get_notebook_paths(notebook_id, notebook_title or "", email or user_id)
@@ -571,13 +585,25 @@ async def import_url_as_source(
     # Legacy compat
     user_dir = _notebook_dir(email, notebook_id)
     user_dir.mkdir(parents=True, exist_ok=True)
-    legacy_filename = _sanitize_md_filename(title, "网页")
+    legacy_filename = _sanitize_md_filename(title, "Web Page")
     legacy_path = user_dir / legacy_filename
     if not legacy_path.exists():
         try:
             shutil.copy2(str(source_info.original_path), str(legacy_path))
         except Exception:
             pass
+
+    # Auto-embed
+    try:
+        local_model = os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        await process_knowledge_base_files(
+            file_list=[{"path": str(source_info.original_path)}],
+            base_dir=str(paths.vector_store_dir),
+            mineru_output_base=str(paths.source_mineru_dir(source_info.original_path.name)),
+            model_name=local_model
+        )
+    except Exception as e:
+        log.warning("[import-url-as-source] embedding failed: %s", e)
 
     project_root = get_project_root()
     rel = source_info.original_path.relative_to(project_root)
@@ -635,7 +661,7 @@ async def delete_kb_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 def _vector_store_base_dir(email: Optional[str], notebook_id: Optional[str]) -> Optional[str]:
-    """与 kb_embedding 约定一致：返回该 notebook 的向量库根目录，供 RAG 使用。"""
+    """Consistent with kb_embedding convention: returns vector store root for specific notebook, for RAG use."""
     root = get_project_root()
     if not email:
         base = root / "outputs" / "kb_data" / "vector_store_main"
@@ -716,8 +742,8 @@ def _build_chat_request(
         query=query,
         history=history,
         vector_store_base_dir=_resolve_vector_store_dir(email, notebook_id),
-        chat_api_url=api_url or os.getenv("DF_API_URL"),
-        api_key=api_key or os.getenv("DF_API_KEY"),
+        chat_api_url=api_url or os.getenv("DF_API_URL") or settings.DEFAULT_LLM_API_URL,
+        api_key=api_key or settings.DF_API_KEY or settings.DEFAULT_LLM_API_KEY,
         model=model,
     )
 
@@ -738,7 +764,7 @@ async def chat_with_kb(
     model: str = Body(settings.KB_CHAT_MODEL, embed=True),
 ):
     """
-    Intelligent QA Chat. 若传 email/notebook_id 且该 notebook 已建索引，会优先用 RAG 检索片段作为上下文。
+    Intelligent QA Chat. If email/notebook_id is provided and initialized, RAG search fragments will be prioritized as context.
     """
     log.info(f"[chat_with_kb] === Request received ===")
     log.info(f"[chat_with_kb] files (raw): {files}")
@@ -778,7 +804,7 @@ async def chat_with_kb(
             source_preview_mapping = getattr(result_state, "source_preview_mapping", {})
             source_reference_mapping = getattr(result_state, "source_reference_mapping", {})
 
-        # 将 source_mapping 的 int key 转为 str（JSON 要求）
+        # Convert source_mapping int keys to str (JSON requirement)
         source_mapping_str = {str(k): v for k, v in source_mapping.items()} if source_mapping else {}
         source_preview_mapping_str = {str(k): v for k, v in source_preview_mapping.items()} if source_preview_mapping else {}
         source_reference_mapping_str = {str(k): v for k, v in source_reference_mapping.items()} if source_reference_mapping else {}
@@ -856,17 +882,26 @@ async def chat_with_kb_stream(
             yield _jsonl_line({
                 "type": "stage",
                 "stage": "generating",
-                "message": "正在生成回答",
+                "message": "Generating answer",
                 "message_en": "Generating answer",
             })
 
+            # Zero-Cost Chat Fallback: 
+            # If the user provides a legacy token or it's missing, ensure we don't leak the dead HF_TOKEN.
+            is_legacy_token = req.api_key in ("test", "sk-...", "", None)
+            
+            # Use the local configurations (Ollama/vLLM/Local-Gateway) if no valid key is provided
+            llm_api_key = req.api_key or settings.HF_TOKEN or settings.DEFAULT_LLM_API_KEY
+            llm_base_url = req.chat_api_url or settings.DEFAULT_LLM_API_URL
+            llm_model = req.model or settings.KB_CHAT_MODEL
+
             client = AsyncOpenAI(
-                api_key=req.api_key,
-                base_url=req.chat_api_url,
+                api_key=llm_api_key,
+                base_url=llm_base_url,
             )
 
             stream = await client.chat.completions.create(
-                model=req.model,
+                model=llm_model,
                 messages=[
                     {"role": "system", "content": KbPromptAgentPrompts.system_prompt_for_kb_prompt_agent.strip()},
                     {"role": "user", "content": prompt},
@@ -1647,11 +1682,13 @@ async def import_link_sources(
     embedded = 0
     if saved_md_paths:
         try:
-            vector_base = str(paths.vector_store_dir)
-            file_list = [{"path": p} for p in saved_md_paths]
-            await process_knowledge_base_files(
-                file_list=file_list,
-                base_dir=vector_base,
+            # Centralized Zero-Cost Indexing Bridge
+            local_model = os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+            manifest = await process_knowledge_base_files(
+                file_list=[{"path": p} for p in saved_md_paths],
+                base_dir=str(paths.vector_store_dir),
+                mineru_output_base=str(paths.root / "kb_mineru"),
+                model_name=local_model
             )
             embedded = len(saved_md_paths)
             log.info("[import-link-sources] embedding 完成, %d 个文件", embedded)
@@ -1708,7 +1745,7 @@ async def generate_ppt_from_kb(
     api_url: str = Body(..., embed=True),
     api_key: str = Body(..., embed=True),
     style: str = Body("modern", embed=True),
-    language: str = Body("zh", embed=True),
+    language: str = Body("en", embed=True),
     page_count: int = Body(10, embed=True),
     model: str = Body("deepseek-v3.2", embed=True),
     gen_fig_model: str = Body("gemini-2.5-flash-image", embed=True),
@@ -2051,7 +2088,7 @@ async def generate_deep_research_report(
     notebook_title: Optional[str] = Body(None, embed=True),
     api_url: str = Body(..., embed=True),
     api_key: str = Body(..., embed=True),
-    language: str = Body("zh", embed=True),
+    language: str = Body("en", embed=True),
     style: str = Body("modern", embed=True),
     page_count: int = Body(10, embed=True),
     model: str = Body("deepseek-v3.2", embed=True),
@@ -2290,7 +2327,7 @@ async def generate_podcast_from_kb(
     voice_name: str = Body("Kore", embed=True),
     voice_name_b: str = Body("Puck", embed=True),
     podcast_mode: str = Body("monologue", embed=True),
-    language: str = Body("zh", embed=True),
+    language: str = Body("en", embed=True),
 ):
     """
     从知识库生成播客。支持本地文件与「搜索引入」的 URL：URL 优先用已存 .md，否则抓取后写临时 .md 再参与生成。
@@ -2502,7 +2539,7 @@ async def generate_mindmap_from_kb(
     model: str = Body("deepseek-v3.2", embed=True),
     mindmap_style: str = Body("default", embed=True),
     max_depth: int = Body(3, embed=True),
-    language: str = Body("zh", embed=True),
+    language: str = Body("en", embed=True),
 ):
     """
     从知识库生成思维导图。支持本地文件与「搜索引入」的 URL：路径用 _resolve_local_path；URL 优先用已存 .md，否则抓取后写临时 .md。
@@ -2680,7 +2717,7 @@ async def generate_drawio_from_kb(
     model: str = Body("deepseek-v3.2", embed=True),
     diagram_type: str = Body("auto", embed=True),
     diagram_style: str = Body("default", embed=True),
-    language: str = Body("zh", embed=True),
+    language: str = Body("en", embed=True),
     text_content: Optional[str] = Body(None, embed=True),
 ):
     """
@@ -2749,7 +2786,7 @@ async def generate_flashcards(
     api_url: str = Body(..., embed=True),
     api_key: str = Body(..., embed=True),
     model: str = Body("deepseek-v3.2", embed=True),
-    language: str = Body("zh", embed=True),
+    language: str = Body("en", embed=True),
     card_count: int = Body(20, embed=True),
 ):
     """从知识库文件生成闪卡"""

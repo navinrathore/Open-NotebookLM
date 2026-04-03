@@ -16,8 +16,8 @@ log = get_logger(__name__)
 
 def _to_outputs_url(abs_path: str, request: Request | None = None) -> str:
     """
-    将绝对路径转换为浏览器可访问的完整 URL。
-    默认认为所有输出文件都位于项目根目录下的 outputs/ 目录中。
+    Converts an absolute path to a full URL accessible by the browser.
+    Default assumes all output files are located in the outputs/ directory under the project root.
     """
     project_root = get_project_root()
     outputs_root = project_root / "outputs"
@@ -27,7 +27,7 @@ def _to_outputs_url(abs_path: str, request: Request | None = None) -> str:
     log.info(f"[DEBUG] abs_path: {abs_path}")
 
     p = Path(abs_path)
-    # 如果是相对路径，先转为绝对路径（相对于项目根目录）
+    # If relative path, convert to absolute (relative to project root)
     if not p.is_absolute():
         p = (project_root / p).resolve()
 
@@ -56,26 +56,26 @@ def _to_outputs_url(abs_path: str, request: Request | None = None) -> str:
 
 def _from_outputs_url(url_or_path: str) -> str:
     """
-    尝试将前端传来的 URL (包含 /outputs/) 转换回本地绝对路径。
-    如果不是 URL 或者转换失败，则返回原值。
+    Attempts to convert a URL (containing /outputs/) from the frontend back to a local absolute path.
+    Returns the original value if it's not a URL or conversion fails.
     """
     if not url_or_path or not isinstance(url_or_path, str):
         return url_or_path
 
-    # 如果已经是绝对路径且存在，直接返回
+    # If already an absolute path and exists, return as is
     if os.path.isabs(url_or_path) and os.path.exists(url_or_path):
         return url_or_path
 
-    # 简单判断是否是 http URL
+    # Simple check if it's an http URL
     if not url_or_path.startswith("http") and not url_or_path.startswith("/outputs/"):
         return url_or_path
 
-    # 查找 /outputs/ 的位置
+    # Find position of /outputs/
     if "/outputs/" not in url_or_path:
         return url_or_path
 
     try:
-        # 获取 /outputs/ 之后的部分
+        # Get part after /outputs/
         path_str = url_or_path
         if url_or_path.startswith("http"):
             parsed = urlparse(url_or_path)
@@ -83,7 +83,7 @@ def _from_outputs_url(url_or_path: str) -> str:
 
         if "/outputs/" in path_str:
             idx = path_str.index("/outputs/")
-            # outputs/xxx/yyy（URL 中 %40 等需解码，与磁盘路径 dev@... 一致）
+            # outputs/xxx/yyy (Url-encoded characters like %40 must be decoded to match disk paths)
             rel_path = path_str[idx + len("/outputs/") :].lstrip("/")
             rel_path = unquote(rel_path)
 

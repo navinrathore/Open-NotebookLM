@@ -1,9 +1,9 @@
 """
-Paper2Drawio Service：AI 驱动 DrawIO 图表生成。
-与 dataflow_agent.workflow.wf_paper2drawio 配合使用。
-支持两种模式：
-- 文本模式：LLM 从文本生成 drawio（paper2drawio workflow）
-- 图片模式：SAM3 从图片分割生成 drawio（paper2drawio_sam3 workflow）
+Paper2Drawio Service: AI-powered DrawIO diagram generation.
+Works with dataflow_agent.workflow.wf_paper2drawio.
+Supports two modes:
+- Text mode: LLM generates drawio from text (paper2drawio workflow)
+- Image mode: SAM3 generates drawio from image segmentation (paper2drawio_sam3 workflow)
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _get_setting(name: str, default: Any) -> Any:
 
 
 class Paper2DrawioService:
-    """Paper2Drawio 业务服务"""
+    """Paper2Drawio Business Service"""
 
     def _create_run_dir(self, prefix: str, email: Optional[str]) -> Path:
         ts = int(time.time())
@@ -134,8 +134,8 @@ class Paper2DrawioService:
         output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        SAM3 模式：从图片生成 drawio。
-        如果提供 sam3_cache_dir 且已有缓存，跳过 SAM3 预测直接用缓存。
+        SAM3 mode: Generate drawio from image.
+        If sam3_cache_dir is provided and cache exists, skip SAM3 prediction and use cache directly.
         """
         if output_dir:
             run_dir = Path(output_dir)
@@ -289,7 +289,7 @@ class Paper2DrawioService:
         filename: str = "diagram",
         request: Optional[Request] = None,
     ) -> Dict[str, Any]:
-        """导出图表为 .drawio 或其它格式"""
+        """Export diagram as .drawio or other formats."""
         run_dir = self._create_run_dir("paper2drawio_export", None)
         if format == "drawio":
             output_path = run_dir / f"{filename}.drawio"

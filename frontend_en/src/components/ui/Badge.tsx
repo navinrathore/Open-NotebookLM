@@ -82,7 +82,7 @@ export const Badge: React.FC<BadgeProps> = ({
             onRemove();
           }}
           className="shrink-0 ml-0.5 rounded-full hover:bg-black/10 transition-colors"
-          aria-label="移除标签"
+          aria-label="Remove tag"
           style={{ padding: 2 }}
         >
           <svg

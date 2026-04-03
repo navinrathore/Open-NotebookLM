@@ -14,9 +14,9 @@ export interface DrawioInlineEditorProps {
   onXmlChange?: (xml: string) => void;
   height?: string;
   loadingLabel?: string;
-  /** 是否使用紧凑样式（适合嵌入卡片/弹窗） */
+  /** Compact style (suitable for embedding in cards/modals) */
   compact?: boolean;
-  /** 是否最大化：只显示画布，无标题/导出栏，占满父容器 */
+  /** Maximize: Show only canvas, no title/export bar, fill parent container */
   maximized?: boolean;
 }
 
@@ -343,7 +343,7 @@ const DrawioInlineEditor: React.FC<DrawioInlineEditorProps> = ({
           <span
             className={`text-xs ${drawioReady ? 'text-teal-600' : 'text-gray-400'}`}
           >
-            {drawioReady ? 'Ready' : loadingLabel ?? 'Loading…'}
+            {drawioReady ? 'Ready' : loadingLabel ?? 'Loading...'}
           </span>
           <select
             value={exportFormat}

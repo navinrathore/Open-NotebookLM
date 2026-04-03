@@ -410,7 +410,7 @@ class DataExtractService:
             "primary_datasource_id": primary_datasource_id,
             "selected_datasource_ids": resolved_selected_ids,
             "datasource_snapshot": datasource_snapshot,
-            "title": title or ds.get("display_name") or ds.get("name") or "智能取数",
+            "title": title or ds.get("display_name") or ds.get("name") or "Data Fetch",
             "created_at": now,
             "updated_at": now,
         }
@@ -613,9 +613,9 @@ class DataExtractService:
             try:
                 parsed_answer = json.loads(raw_answer)
                 sql_text = sql_text or parsed_answer.get("query_text")
-                answer_text = parsed_answer.get("final_answer") or f"已完成取数，返回 {data_block.get('row_count', 0)} 行结果。"
+                answer_text = parsed_answer.get("final_answer") or f"Data extraction complete, returned {data_block.get('row_count', 0)} rows of results."
             except Exception:
-                answer_text = f"已完成取数，返回 {data_block.get('row_count', 0)} 行结果。"
+                answer_text = f"Data extraction complete, returned {data_block.get('row_count', 0)} rows of results."
 
         turn_id = uuid4().hex
         artifact = await self._persist_artifact(
@@ -748,7 +748,7 @@ class DataExtractService:
                     preview_text = local_path.read_text(encoding="utf-8", errors="replace")
             if not preview_text:
                 raise HTTPException(status_code=400, detail="Artifact has no importable content")
-            source_info = await mgr.import_text(preview_text, artifact.get("title") or artifact.get("question") or "取数产出")
+            source_info = await mgr.import_text(preview_text, artifact.get("title") or artifact.get("question") or "Data Extract Result")
             source_name = source_info.original_path.name
             rel = source_info.original_path.relative_to(get_project_root())
             source_static_url = "/" + rel.as_posix()

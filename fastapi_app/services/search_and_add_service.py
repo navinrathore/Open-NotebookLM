@@ -1,6 +1,6 @@
 """
-Search & Add 服务
-简单的 Web 搜索 + Top10 爬取功能
+Search & Add Service
+Simple Web Search + Top10 Crawling Functionality
 """
 import asyncio
 import httpx
@@ -12,7 +12,7 @@ log = get_logger(__name__)
 
 
 class SearchAndAddService:
-    """Search & Add 服务"""
+    """Search & Add Service"""
 
     def __init__(self):
         self.timeout = 30.0
@@ -25,13 +25,13 @@ class SearchAndAddService:
         search_api_key: str = None,
     ) -> Dict[str, Any]:
         """
-        搜索并爬取 Top K 结果
+        Search and crawl Top K results.
 
         Args:
-            query: 搜索查询
-            top_k: 返回前 K 个结果
-            search_provider: 搜索引擎提供商
-            search_api_key: 搜索 API 密钥
+            query: Search query
+            top_k: Return top K results
+            search_provider: Search engine provider
+            search_api_key: Search API key
 
         Returns:
             {
@@ -41,15 +41,15 @@ class SearchAndAddService:
                     "title": str,
                     "url": str,
                     "snippet": str,
-                    "content": str,  # 爬取的完整内容
+                    "content": str,  # Crawled full content
                     "crawl_success": bool
                 }]
             }
         """
-        log.info(f"[SearchAndAdd] 开始搜索: {query}, top_k={top_k}")
+        log.info(f"[SearchAndAdd] Starting search: {query}, top_k={top_k}")
 
         try:
-            # 1. 执行搜索
+            # 1. Execute search
             search_results = await self._search(
                 query, top_k, search_provider, search_api_key
             )
@@ -59,26 +59,26 @@ class SearchAndAddService:
                     "success": False,
                     "query": query,
                     "sources": [],
-                    "error": "搜索未返回结果"
+                    "error": "No results returned from search"
                 }
 
-            # 2. 并发爬取所有结果
+            # 2. Concurrently crawl all results
             crawl_tasks = [
                 self._crawl_url(result["url"], result["title"])
                 for result in search_results[:top_k]
             ]
             crawled_contents = await asyncio.gather(*crawl_tasks, return_exceptions=True)
 
-            # 3. 合并搜索结果和爬取内容
+            # 3. Merge search results and crawled content
             sources = []
             for i, result in enumerate(search_results[:top_k]):
                 crawl_result = crawled_contents[i]
 
                 if isinstance(crawl_result, Exception):
-                    log.warning(f"[SearchAndAdd] 爬取失败 {result['url']}: {crawl_result}")
+                    log.warning(f"[SearchAndAdd] Crawl failed for {result['url']}: {crawl_result}")
                     sources.append({
                         **result,
-                        "content": result["snippet"],  # 降级使用摘要
+                        "content": result["snippet"],  # Fallback to snippet
                         "crawl_success": False
                     })
                 else:
@@ -88,7 +88,7 @@ class SearchAndAddService:
                         "crawl_success": True
                     })
 
-            log.info(f"[SearchAndAdd] 完成，成功爬取 {sum(s['crawl_success'] for s in sources)}/{len(sources)} 个页面")
+            log.info(f"[SearchAndAdd] Completed, successfully crawled {sum(s['crawl_success'] for s in sources)}/{len(sources)} pages")
 
             return {
                 "success": True,
@@ -97,7 +97,7 @@ class SearchAndAddService:
             }
 
         except Exception as e:
-            log.error(f"[SearchAndAdd] 执行失败: {e}")
+            log.error(f"[SearchAndAdd] Execution failed: {e}")
             return {
                 "success": False,
                 "query": query,
@@ -112,11 +112,11 @@ class SearchAndAddService:
         provider: str,
         api_key: str = None
     ) -> List[Dict[str, str]]:
-        """执行搜索"""
+        """Execute search"""
         if provider == "serper":
             return await self._search_serper(query, top_k, api_key)
         else:
-            raise ValueError(f"不支持的搜索提供商: {provider}")
+            raise ValueError(f"Unsupported search provider: {provider}")
 
     async def _search_serper(
         self,
@@ -124,12 +124,12 @@ class SearchAndAddService:
         top_k: int,
         api_key: str = None
     ) -> List[Dict[str, str]]:
-        """使用 Serper API 搜索"""
+        """Search using Serper API"""
         import os
         api_key = api_key or os.getenv("SERPER_API_KEY")
 
         if not api_key:
-            raise ValueError("SERPER_API_KEY 未配置")
+            raise ValueError("SERPER_API_KEY is not configured")
 
         url = "https://google.serper.dev/search"
         headers = {
@@ -158,14 +158,14 @@ class SearchAndAddService:
 
     async def _crawl_url(self, url: str, title: str) -> str:
         """
-        爬取单个 URL 的内容
+        Crawl content of a single URL.
 
         Args:
-            url: 目标 URL
-            title: 页面标题
+            url: Target URL
+            title: Page title
 
         Returns:
-            爬取的文本内容（Markdown 格式）
+            Crawled text content (Markdown format)
         """
         try:
             async with httpx.AsyncClient(
@@ -178,15 +178,15 @@ class SearchAndAddService:
                 response = await client.get(url)
                 response.raise_for_status()
 
-            # 解析 HTML
+            # Parse HTML
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # 移除脚本和样式
+            # Remove scripts and styles
             for script in soup(["script", "style", "nav", "footer", "header"]):
                 script.decompose()
 
-            # 提取主要内容
-            # 优先查找常见的内容容器
+            # Extract main content
+            # Prioritize common content containers
             main_content = None
             for selector in ["article", "main", ".content", "#content", ".post", ".entry"]:
                 main_content = soup.select_one(selector)
@@ -197,31 +197,31 @@ class SearchAndAddService:
                 main_content = soup.body
 
             if not main_content:
-                return f"# {title}\n\n无法提取页面内容"
+                return f"# {title}\n\nUnable to extract page content"
 
-            # 提取文本
+            # Extract text
             text = main_content.get_text(separator="\n", strip=True)
 
-            # 清理多余空行
+            # Clean up extra blank lines
             lines = [line.strip() for line in text.split("\n") if line.strip()]
             text = "\n\n".join(lines)
 
-            # 限制长度（避免过长）
+            # Limit length (avoid being too long)
             max_chars = 50000
             if len(text) > max_chars:
-                text = text[:max_chars] + "\n\n...(内容已截断)"
+                text = text[:max_chars] + "\n\n...(Content truncated)"
 
-            # 格式化为 Markdown
+            # Format as Markdown
             markdown = f"# {title}\n\n**Source:** {url}\n\n---\n\n{text}"
 
             return markdown
 
         except Exception as e:
-            log.error(f"[SearchAndAdd] 爬取 {url} 失败: {e}")
+            log.error(f"[SearchAndAdd] Failed to crawl {url}: {e}")
             raise
 
     def format_sources_as_markdown(self, sources: List[Dict[str, Any]]) -> str:
-        """将多个来源格式化为单个 Markdown 文档"""
+        """Format multiple sources into a single Markdown document"""
         md_parts = []
 
         for i, source in enumerate(sources, 1):

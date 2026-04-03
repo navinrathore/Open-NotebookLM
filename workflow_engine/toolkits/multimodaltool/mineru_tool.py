@@ -32,7 +32,7 @@ from mineru_vl_utils import MinerUClient
 # 1. two_step_extract (sync)
 # ---------------------------------------
 def run_two_step_extract(image_path: str, port: int):
-    """同步调用 MinerU two_step_extract，处理单张图片并返回结构化结果。"""
+    """Synchronously calls MinerU two_step_extract, processes a single image and returns structured results."""
     image = Image.open(image_path)
     client = MinerUClient(
         backend="http-client",
@@ -45,7 +45,7 @@ def run_two_step_extract(image_path: str, port: int):
 # 2. batch_two_step_extract (sync)
 # ---------------------------------------
 def run_batch_two_step_extract(image_paths: list[str], port: int):
-    """同步批量调用 MinerU two_step_extract，处理多张图片并返回结果列表。"""
+    """Synchronously batch calls MinerU two_step_extract, processes multiple images and returns a list of results."""
     images = [Image.open(p) for p in image_paths]
     client = MinerUClient(
         backend="http-client",
@@ -58,7 +58,7 @@ def run_batch_two_step_extract(image_paths: list[str], port: int):
 # 3. aio_two_step_extract (async)
 # ---------------------------------------
 async def run_aio_two_step_extract(image_path: str, port: int):
-    """异步调用 MinerU two_step_extract，处理单张图片并返回结构化结果。"""
+    """Asynchronously calls MinerU two_step_extract, processes a single image and returns structured results."""
     image = Image.open(image_path)
     client = MinerUClient(
         backend="http-client",
@@ -71,7 +71,7 @@ async def run_aio_two_step_extract(image_path: str, port: int):
 # 4. aio_batch_two_step_extract (async)
 # ---------------------------------------
 async def run_aio_batch_two_step_extract(image_paths: list[str], port: int):
-    """异步批量调用 MinerU two_step_extract，处理多张图片并返回结果列表。"""
+    """Asynchronously batch calls MinerU two_step_extract, processes multiple images and returns a list of results."""
     images = [Image.open(p) for p in image_paths]
     client = MinerUClient(
         backend="http-client",
@@ -81,7 +81,7 @@ async def run_aio_batch_two_step_extract(image_paths: list[str], port: int):
 
 
 # ---------------------------------------
-# 5. 根据 MinerU bbox & type 裁剪原图
+# 5. Crop original image based on MinerU bbox & type
 # ---------------------------------------
 def crop_mineru_blocks_by_type(
     image_path: str,
@@ -91,18 +91,19 @@ def crop_mineru_blocks_by_type(
     prefix: str = "",
 ) -> List[str]:
     """
-    根据 MinerU two_step_extract / aio_two_step_extract 的结构化结果，
-    按指定 type 的 bbox 从整张图片中裁剪子图并保存到输出目录。
+    Crops sub-images from the full image according to the bbox of specified type(s)
+    based on structured results from MinerU two_step_extract / aio_two_step_extract
+    and saves them to the output directory.
 
-    参数:
-        image_path: 原始图片路径 (如技术路线图 PNG)
-        blocks: MinerU 返回的 list[dict] 结果
-        target_type: 需要裁剪的块类型，如 "title" / "text" / "image" / "footer"
-        output_dir: 输出目录路径，不存在会自动创建
-        prefix: 输出文件名前缀，可选
+    Arguments:
+        image_path: Original image path (e.g., technical roadmap PNG)
+        blocks: list[dict] results returned by MinerU
+        target_type: Type of blocks to crop, e.g., "title" / "text" / "image" / "footer"
+        output_dir: Output directory path; will be created automatically if it doesn't exist
+        prefix: Optional prefix for output filenames
 
-    返回:
-        所有成功保存的裁剪图片的绝对路径列表
+    Returns:
+        A list of absolute paths for all successfully saved cropped images
     """
     img = Image.open(image_path)
     width, height = img.size
@@ -112,7 +113,7 @@ def crop_mineru_blocks_by_type(
 
     saved_paths: List[str] = []
 
-    # target_type 为 None 时不过滤，返回所有 block
+    # target_type is None means no filtering, return all blocks
     if target_type is None:
         target_types = None
     elif isinstance(target_type, str):
@@ -122,7 +123,7 @@ def crop_mineru_blocks_by_type(
 
     for idx, block in enumerate(blocks):
         block_type = block.get("type")
-        # 只有在显式指定了 target_type 时才进行过滤
+        # Only filter when target_type is explicitly specified
         if target_types is not None and block_type not in target_types:
             continue
 
@@ -132,19 +133,19 @@ def crop_mineru_blocks_by_type(
 
         x1_norm, y1_norm, x2_norm, y2_norm = bbox
 
-        # 将归一化坐标 [0,1] 转为像素坐标，并做边界裁剪
+        # Convert normalized coordinates [0,1] to pixel coordinates and perform boundary clipping
         left = max(0, min(width, int(round(x1_norm * width))))
         top = max(0, min(height, int(round(y1_norm * height))))
         right = max(0, min(width, int(round(x2_norm * width))))
         bottom = max(0, min(height, int(round(y2_norm * height))))
 
-        # 无效 bbox 跳过
+        # Skip invalid bbox
         if right <= left or bottom <= top:
             continue
 
         cropped = img.crop((left, top, right, bottom))
 
-        # 使用实际 block_type 命名，便于区分不同类型
+        # Use actual block_type for naming to help distinguish between types
         safe_block_type = block_type or "unknown"
         filename = f"{prefix}{safe_block_type}_{idx}.png"
         out_path = out_dir / filename
@@ -162,35 +163,36 @@ def run_mineru_pdf_extract(
     backend: Optional[str] = None,
 ):
     """
-    使用 MinerU 命令行方式提取 PDF 中的结构化内容。
+    Extract structured content from PDF using MinerU command line.
 
-    参数:
-        pdf_path: PDF 文件路径
-        output_dir: 输出目录路径，不存在会自动创建
-        source: 下载模型的源，可选 modelscope、huggingface
-        mineru_executable: mineru 可执行文件路径，
-            - 不传时：优先从环境变量 MINERU_CMD 中读取，
-              若没有则从 PATH 中查找 'mineru'
-            - 传入绝对路径时：直接使用该路径
-        backend: 解析后端。传 "pipeline" 时使用 pipeline 后端（不依赖 vLLM，避免与 vLLM 新版的
-            ParallelConfig.world_size 等不兼容）；不传则使用 MinerU 默认（多为 hybrid-auto-engine，依赖 vLLM）。
-            也可通过环境变量 MINERU_BACKEND 指定（如 MINERU_BACKEND=pipeline）。
+    Arguments:
+        pdf_path: PDF file path
+        output_dir: Output directory path; will be created automatically if it doesn't exist
+        source: Source for downloading models, e.g., modelscope, huggingface
+        mineru_executable: Path to mineru executable,
+            - If not provided: Priority is given to MINERU_CMD environment variable,
+              otherwise it searches for 'mineru' in PATH
+            - If absolute path is provided: Uses that path directly
+        backend: Parsing backend. If "pipeline" is passed, it uses the pipeline backend (does not rely on vLLM,
+            avoiding incompatibilities with newer vLLM versions like ParallelConfig.world_size);
+            if not passed, it uses MinerU default (usually hybrid-auto-engine, which relies on vLLM).
+            Can also be specified via MINERU_BACKEND environment variable (e.g., MINERU_BACKEND=pipeline).
 
-    返回:
-        解析的所有图片、markdown格式的内容
+    Returns:
+        All extracted images and markdown content
     """
-    # 1. 解析 mineru 可执行路径
+    # 1. Resolve mineru executable path
     if mineru_executable is None:
         mineru_executable = (
-            os.environ.get("MINERU_CMD")  # 环境变量优先
-            or shutil.which("mineru")     # 当前 env 的命令
+            os.environ.get("MINERU_CMD")  # Env var priority
+            or shutil.which("mineru")     # Command in current env
         )
         if mineru_executable is None:
             raise RuntimeError(
-                "未找到 `mineru` 可执行文件，请确保：\n"
-                "1) 已在当前环境安装 MinerU，并且 `mineru` 在 PATH 中；或\n"
-                "2) 设置环境变量 MINERU_CMD 指向 mineru 可执行文件；或\n"
-                "3) 调用 run_mineru_pdf_extract 时显式传入 mineru_executable 参数。"
+                "mineru executable not found, please ensure:\n"
+                "1) MinerU is installed in the current environment and `mineru` is in PATH; or\n"
+                "2) MINERU_CMD environment variable is set to the mineru executable path; or\n"
+                "3) Explicitly pass mineru_executable argument when calling run_mineru_pdf_extract."
             )
 
     backend = backend or os.environ.get("MINERU_BACKEND", "").strip() or None
@@ -207,15 +209,15 @@ def run_mineru_pdf_extract(
     if backend:
         mineru_cmd.extend(["--backend", backend])
 
-    # 2. 可选：自动创建 output_dir
+    # 2. Optional: Auto-create output_dir
     if output_dir:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # 3. 简单的负载均衡 (Simple Load Balancing) for GPU
-    #    从环境变量 MINERU_DEVICES 中读取可用设备列表 (默认 "5,6")
-    #    随机选择一个设备 ID 分配给当前子进程
+    # 3. Simple Load Balancing for GPU
+    #    Read list of available devices from MINERU_DEVICES environment variable (default "5,6")
+    #    Randomly select a device ID to assign to the current child process
     available_devices_str = os.environ.get("MINERU_DEVICES", "4,5,6")
-    # 清理并分割字符串，去除空白
+    # Clean and split string, removing whitespace
     available_devices = [d.strip() for d in available_devices_str.split(",") if d.strip()]
     
     env = os.environ.copy()
@@ -226,7 +228,7 @@ def run_mineru_pdf_extract(
     else:
         print("[MinerU] No GPU devices configured in MINERU_DEVICES, using system default.")
 
-    # 4. 执行命令
+    # 4. Execute command
     subprocess.run(
         mineru_cmd,
         shell=False,
@@ -247,14 +249,14 @@ def crop_mineru_blocks_with_meta(
     prefix: str = "",
 ) -> List[Dict[str, Any]]:
     """
-    与 ``crop_mineru_blocks_by_type`` 类似，但返回包含元信息的列表，
-    方便后续根据 MinerU 的 bbox 在 PPT 中按比例还原布局。
+    Similar to ``crop_mineru_blocks_by_type``, but returns a list containing metadata,
+    facilitating the restoration of layouts in PPT proportionally according to MinerU's bbox.
 
-    返回的每个元素包含:
-        - block_index: 在原始 blocks 列表中的索引
-        - type: MinerU 块类型
-        - bbox: 原始归一化 bbox [x1, y1, x2, y2]
-        - png_path: 裁剪得到的小图 PNG 绝对路径
+    Each element returned contains:
+        - block_index: Index in the original blocks list
+        - type: MinerU block type
+        - bbox: Original normalized bbox [x1, y1, x2, y2]
+        - png_path: Absolute path of the cropped small PNG image
     """
     img = Image.open(image_path)
     width, height = img.size
@@ -264,7 +266,7 @@ def crop_mineru_blocks_with_meta(
 
     results: List[Dict[str, Any]] = []
 
-    # target_type 为 None 时不过滤，返回所有 block
+    # No filtering when target_type is None, return all blocks
     if target_type is None:
         target_types = None
     elif isinstance(target_type, str):
@@ -274,7 +276,7 @@ def crop_mineru_blocks_with_meta(
 
     for idx, block in enumerate(blocks):
         block_type = block.get("type")
-        # 只有在显式指定了 target_type 时才进行过滤
+        # Only filter when target_type is explicitly specified
         if target_types is not None and block_type not in target_types:
             continue
 
@@ -284,7 +286,7 @@ def crop_mineru_blocks_with_meta(
 
         x1_norm, y1_norm, x2_norm, y2_norm = bbox
 
-        # 将归一化坐标 [0,1] 转为像素坐标，并做边界裁剪
+        # Convert normalized coordinates [0,1] to pixel coordinates and perform boundary clipping
         left = max(0, min(width, int(round(x1_norm * width))))
         top = max(0, min(height, int(round(y1_norm * height))))
         right = max(0, min(width, int(round(x2_norm * width))))
@@ -314,35 +316,34 @@ def crop_mineru_blocks_with_meta(
 
 def svg_to_emf(svg_path: str, emf_path: str, dpi: int = 600) -> str:
     """
-    使用 Inkscape 将 SVG 文件转换为 EMF 矢量图，返回生成的 EMF 路径。
-    使用 Inkscape 将 SVG 转换为 EMF 矢量图。
+    Converts SVG file into EMF vector image using Inkscape, returns generated EMF path.
 
-    依赖
+    Dependencies
     ----
-    - 系统需安装 Inkscape，并且 `inkscape` 在 PATH 中可直接调用。
+    - System must have Inkscape installed, and `inkscape` must be directly callable in PATH.
 
-    参数
+    Parameters
     ----
     svg_path:
-        输入 SVG 文件路径。
+        Input SVG file path.
     emf_path:
-        输出 EMF 文件路径。
+        Output EMF file path.
 
-    返回
-    ----
+    Returns
+    -------
     str
-        生成的 EMF 文件的绝对路径。
+        Absolute path of generated EMF file.
 
-    异常
-    ----
+    Exceptions
+    -------
     FileNotFoundError
-        当输入 SVG 文件不存在时。
+        When input SVG file does not exist.
     RuntimeError
-        当 Inkscape 调用失败或未生成输出文件时。
+        When Inkscape call fails or output file is not generated.
     """
     svg_p = Path(svg_path)
     if not svg_p.exists():
-        raise FileNotFoundError(f"输入 SVG 不存在: {svg_p}")
+        raise FileNotFoundError(f"Input SVG does not exist: {svg_p}")
 
     emf_p = Path(emf_path)
     emf_p.parent.mkdir(parents=True, exist_ok=True)
@@ -364,24 +365,24 @@ def svg_to_emf(svg_path: str, emf_path: str, dpi: int = 600) -> str:
         )
     except FileNotFoundError as e:
         raise RuntimeError(
-            "调用 Inkscape 失败：系统中可能未安装 `inkscape` 可执行文件，"
-            "请先安装 Inkscape 并确保其在 PATH 中。"
+            "Calling Inkscape failed: `inkscape` executable might not be installed in the system, "
+            "please install Inkscape first and ensure it is in the PATH."
         ) from e
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"Inkscape 转换失败，返回码 {result.returncode}：\n"
+            f"Inkscape conversion failed, return code {result.returncode}:\n"
             f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
         )
 
     if not emf_p.exists():
-        raise RuntimeError(f"Inkscape 运行后未发现输出 EMF 文件: {emf_p}")
+        raise RuntimeError(f"Output EMF file not found after Inkscape run: {emf_p}")
 
     return str(emf_p.resolve())
 
 
 # ---------------------------------------
-# 6. 递归 MinerU 拆图 + 坐标映射 (HTTP 版)
+# 6. Recursive MinerU block splitting + Coordinate mapping (HTTP Version)
 # ---------------------------------------
 def _crop_image_by_norm_bbox(
     image_path: str,
@@ -391,7 +392,8 @@ def _crop_image_by_norm_bbox(
     index: int = 0,
 ) -> str:
     """
-    按归一化 bbox [x1,y1,x2,y2] 从 image_path 裁剪出子图并保存，返回绝对路径。
+    Crops a sub-image from image_path according to normalized bbox [x1, y1, x2, y2]
+    and saves it, returning the absolute path.
     """
     img = Image.open(image_path)
     width, height = img.size
@@ -427,45 +429,45 @@ async def recursive_mineru_layout(
     block_types_for_subimage: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    使用 MinerU HTTP two_step_extract，递归拆图并将所有最底层块映射到
-    最顶层图的归一化坐标系。
+    Recursively split image using MinerU HTTP two_step_extract and map all bottom-level
+    blocks to normalized coordinate system of the top-level image.
 
-    返回的每个元素形如:
+    Each element returned is like:
         {
             "type": str,
-            "bbox": [x1, y1, x2, y2],   # 相对于最顶层图的归一化坐标
-            "png_path": str | None,     # 对应子图路径（图像/表格等）
-            "text": str | None,         # 文本内容（若有）
-            "depth": int,               # 所在递归深度
+            "bbox": [x1, y1, x2, y2],   # Normalized coordinates relative to the top-level image
+            "png_path": str | None,     # Path to corresponding sub-image (image/table etc.)
+            "text": str | None,         # Text content (if any)
+            "depth": int,               # Recursion depth
         }
     """
     if current_depth > max_depth:
         return []
 
-    # 默认在原图同目录下创建一个 mineru_recursive 子目录
+    # Default to create a mineru_recursive subdirectory under the original image directory
     if output_dir is None:
         base = Path(image_path).with_suffix("")
         output_dir = base.parent / f"{base.stem}_mineru_recursive"
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 默认哪些类型会继续拆成子图
+    # Default block types to continue splitting into sub-images
     if block_types_for_subimage is None:
         block_types_for_subimage = ["image", "img", "table", "figure"]
 
-    # 1. 当前层 MinerU 调用
+    # 1. Current layer MinerU call
     blocks = await run_aio_two_step_extract(image_path=image_path, port=port)
 
     leaf_items: List[Dict[str, Any]] = []
 
-    # blocks 结构假定为 List[Dict]，包含 type / bbox / text 等
+    # Assume blocks structure as List[Dict], containing type / bbox / text etc.
     for idx, blk in enumerate(blocks):
         blk_type = blk.get("type")
         bbox = blk.get("bbox")
         if not bbox or len(bbox) != 4:
             continue
 
-        # 保证归一化 bbox 在 [0,1] 内，大致裁剪
+        # Ensure normalized bbox is within [0,1], rough cropping
         x1, y1, x2, y2 = bbox
         x1 = max(0.0, min(1.0, float(x1)))
         y1 = max(0.0, min(1.0, float(y1)))
@@ -475,7 +477,7 @@ async def recursive_mineru_layout(
             continue
         norm_bbox = [x1, y1, x2, y2]
 
-        # 如果是需要继续拆的图块类型，裁剪子图并递归
+        # If it's a block type that needs further splitting, crop sub-image and recurse
         if blk_type in block_types_for_subimage and current_depth < max_depth:
             try:
                 sub_img_path = _crop_image_by_norm_bbox(
@@ -486,7 +488,7 @@ async def recursive_mineru_layout(
                     index=idx,
                 )
             except Exception:
-                # 裁剪失败则当成叶子块处理
+                # Handle as leaf block if cropping fails
                 leaf_items.append(
                     {
                         "type": blk_type,
@@ -498,7 +500,7 @@ async def recursive_mineru_layout(
                 )
                 continue
 
-            # 子图内部是完整的 [0,1] 坐标系，需要映射回当前图的 norm_bbox
+            # Sub-image internal coordinate system is full [0,1], need to map back to current image norm_bbox
             sub_items = await recursive_mineru_layout(
                 image_path=sub_img_path,
                 port=port,
@@ -522,7 +524,7 @@ async def recursive_mineru_layout(
                 si["bbox"] = [nx1, ny1, nx2, ny2]
                 leaf_items.append(si)
         else:
-            # 文本或其他不再下钻的类型，直接当作叶子
+            # Type that no longer drills down, treat directly as leaf
             leaf_items.append(
                 {
                     "type": blk_type,

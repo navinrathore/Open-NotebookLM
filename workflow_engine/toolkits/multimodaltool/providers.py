@@ -11,15 +11,15 @@ log = get_logger(__name__)
 
 class AIProviderStrategy(ABC):
     """
-    通用 AI 服务商策略基类
-    支持：
-    1. 图像生成 (Generation)
-    2. 多模态理解 (Chat/Vision/Video/OCR)
+    Common AI Provider Strategy Base Class
+    Supports:
+    1. Image Generation (Generation)
+    2. Multimodal Understanding (Chat/Vision/Video/OCR)
     """
     
     @abstractmethod
     def match(self, api_url: str, model: str) -> bool:
-        """判断当前策略是否适用"""
+        """Determines if the current strategy is applicable"""
         pass
         
     # --- Generation Interface ---
@@ -33,7 +33,7 @@ class AIProviderStrategy(ABC):
         **kwargs
     ) -> Tuple[str, Dict[str, Any], bool]:
         """
-        构造文生图请求
+        Constructs a text-to-image request
         Returns: (url, payload, is_stream)
         """
         pass
@@ -47,11 +47,11 @@ class AIProviderStrategy(ABC):
         **kwargs
     ) -> Tuple[str, Dict[str, Any], bool]:
         """
-        构造图生图/编辑请求
+        Constructs an image-to-image/edit request
         Returns: (url, payload, is_stream)
         
-        注意：如果返回的 payload 包含 "__is_multipart__": True，
-        则 payload 应包含 "files" 和 "data" 字段，用于 multipart/form-data 上传。
+        Note: If the returned payload contains "__is_multipart__": True,
+        then payload should contain "files" and "data" fields for use in multipart/form-data upload.
         """
         raise NotImplementedError("Edit not supported by this provider")
 
@@ -64,7 +64,7 @@ class AIProviderStrategy(ABC):
         **kwargs
     ) -> Tuple[str, Dict[str, Any], bool]:
         """
-        构造多图编辑请求
+        Constructs a multi-image edit request
         Returns: (url, payload, is_stream)
         """
         raise NotImplementedError("Multi-image edit not supported by this provider")
@@ -72,7 +72,7 @@ class AIProviderStrategy(ABC):
     @abstractmethod
     def parse_generation_response(self, response_data: Dict[str, Any]) -> str:
         """
-        解析生图响应，返回图片 Base64 字符串
+        Parses the generation response and returns the image Base64 string
         """
         pass
 
@@ -80,14 +80,14 @@ class AIProviderStrategy(ABC):
 
     def build_tts_request(self, api_url: str, model: str, text: str, **kwargs) -> Tuple[str, Dict[str, Any], bool]:
         """
-        构造TTS请求
+        Constructs a TTS request
         Returns: (url, payload, is_stream)
         """
         raise NotImplementedError("TTS not supported by this provider")
     
     def parse_tts_response(self, response_data: Dict[str, Any]) -> bytes:
         """
-        解析TTS响应，返回音频二进制数据
+        Parses the TTS response and returns the audio binary data
         """
         raise NotImplementedError("TTS not supported by this provider")
 
@@ -101,7 +101,7 @@ class AIProviderStrategy(ABC):
         **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
         """
-        构造对话/理解请求 (OCR, Image Understanding, Video Understanding)
+        Constructs a chat/understanding request (OCR, Image Understanding, Video Understanding)
         Returns: (url, payload)
         
         Default implementation: OpenAI Standard Format
@@ -117,7 +117,7 @@ class AIProviderStrategy(ABC):
 
     def parse_chat_response(self, response_data: Dict[str, Any]) -> str:
         """
-        解析对话/理解响应，返回文本内容
+        Parses the chat/understanding response and returns the text content
         
         Default implementation: OpenAI Standard Format
         """
@@ -130,7 +130,7 @@ class AIProviderStrategy(ABC):
 
 class ApiYiGeminiProvider(AIProviderStrategy):
     """
-    APIYI 服务商针对 Gemini 模型的特殊处理
+    Special handling for Gemini models by APIYI provider
     """
     def match(self, api_url: str, model: str) -> bool:
         return detect_provider(api_url) is Provider.APIYI and is_gemini_model(model)
@@ -320,7 +320,7 @@ class ApiYiGeminiProvider(AIProviderStrategy):
 
 class Local123GeminiProvider(AIProviderStrategy):
     """
-    Local 123 服务商针对 Gemini 模型的特殊处理
+    Special handling for Gemini models by Local 123 provider
     """
     def match(self, api_url: str, model: str) -> bool:
         return detect_provider(api_url) is Provider.LOCAL_123 and is_gemini_model(model)
@@ -332,7 +332,7 @@ class Local123GeminiProvider(AIProviderStrategy):
 
         # Logic from original req_img.py
         if aspect_ratio:
-            prompt = f"{prompt} 生成比例：{aspect_ratio}, 4K 分辨率"
+            prompt = f"{prompt} Generation ratio: {aspect_ratio}, 4K resolution"
 
         url = f"{base}/chat/completions"
         payload = {
@@ -476,7 +476,7 @@ class Local123GeminiProvider(AIProviderStrategy):
 
 class ApiYiSeeDreamProvider(AIProviderStrategy):
     """
-    APIYI SeeDream 系列模型支持 (兼容 OpenAI Image API)
+    APIYI SeeDream series model support (Compatible with OpenAI Image API)
     """
     def match(self, api_url: str, model: str) -> bool:
         return model.lower().startswith("seedream")
@@ -497,7 +497,7 @@ class ApiYiSeeDreamProvider(AIProviderStrategy):
             "response_format": response_format,
         }
         
-        # 合并额外参数 (如 output_format)
+        # Merge extra parameters (e.g., output_format)
         for k, v in kwargs.items():
             if k not in payload and k not in ["api_key", "timeout"]:
                 payload[k] = v
@@ -516,7 +516,7 @@ class ApiYiSeeDreamProvider(AIProviderStrategy):
 
 class ApiYiGPTImageProvider(AIProviderStrategy):
     """
-    APIYI GPT-Image 系列模型支持 (兼容 OpenAI Image API)
+    APIYI GPT-Image series model support (Compatible with OpenAI Image API)
     """
     def match(self, api_url: str, model: str) -> bool:
         return model.lower().startswith("gpt-image")
@@ -525,7 +525,7 @@ class ApiYiGPTImageProvider(AIProviderStrategy):
         url = f"{api_url.rstrip('/')}/images/generations"
         
         size = kwargs.get("size", "1024x1024")
-        # 映射 quality 参数: DALL-E 的 standard/hd -> GPT-Image 的 low/medium/high/auto
+        # Map quality parameter: DALL-E's standard/hd -> GPT-Image's low/medium/high/auto
         quality = kwargs.get("quality", "auto")
         if quality == "standard":
             quality = "medium"
@@ -540,9 +540,9 @@ class ApiYiGPTImageProvider(AIProviderStrategy):
             "quality": quality,
         }
         
-        # 白名单过滤：仅传递 GPT-Image 文档支持的参数
-        # 移除 style, aspect_ratio, resolution 等不支持的参数
-        # 移除 response_format (API 报错不支持)
+        # Whitelist filtering: only pass parameters supported by GPT-Image documentation
+        # Remove unsupported parameters like style, aspect_ratio, resolution, etc.
+        # Remove response_format (API reported as unsupported)
         supported_params = [
             "output_format", 
             "output_compression", 
@@ -565,48 +565,48 @@ class ApiYiGPTImageProvider(AIProviderStrategy):
         **kwargs
     ) -> Tuple[str, Dict[str, Any], bool]:
         """
-        构造 APIYI GPT-Image 系列模型的图像编辑请求 (Multipart 格式)
+        Constructs an image editing request for APIYI GPT-Image series models (Multipart format)
         
-        参数:
-            api_url (str): API 基础地址
-            model (str): 模型名称 (如 gpt-image-1)
-            prompt (str): 文本提示词，描述想要生成的编辑效果
-            image_b64 (str): 原始图像的 Base64 编码字符串
-            **kwargs: 其他可选参数
-                - mask_path (str): 遮罩图像的文件路径 (如果存在)
-                - n (int): 生成图像数量，默认为 1
-                - size (str): 输出图像尺寸 (如 1024x1024)
-                - response_format (str): 返回格式 (url 或 b64_json)，注意 GPT-Image-1 可能不支持此参数
-                - user (str): 用户标识符
+        Parameters:
+            api_url (str): API base address
+            model (str): Model name (e.g., gpt-image-1)
+            prompt (str): Text prompt describing the desired editing effect
+            image_b64 (str): Base64 encoded string of the original image
+            **kwargs: Other optional parameters
+                - mask_path (str): File path to mask image (if present)
+                - n (int): Number of images to generate, default is 1
+                - size (str): Output image size (e.g., 1024x1024)
+                - response_format (str): Return format (url or b64_json), note GPT-Image-1 might not support this
+                - user (str): User identifier
         
-        返回:
-            Tuple[str, Dict[str, Any], bool]: (请求URL, 请求载荷, 是否流式)
+        Returns:
+            Tuple[str, Dict[str, Any], bool]: (Request URL, Request Payload, Is Stream)
             
-        注意:
-            返回的 payload 包含特殊标记 "__is_multipart__": True。
-            "files": 包含 'image' 和可选的 'mask' 文件数据 (bytes)。
-            "data": 包含其他表单字段 (prompt, n, size 等)。
+        Note:
+            The returned payload contains a special marker "__is_multipart__": True.
+            "files": Contains 'image' and optional 'mask' file data (bytes).
+            "data": Contains other form fields (prompt, n, size, etc.).
         """
         import base64
         import os
         
         url = f"{api_url.rstrip('/')}/images/edits"
         
-        # 1. 解码图片 Base64 为二进制
+        # 1. Decode image Base64 to binary
         image_bytes = base64.b64decode(image_b64)
         
         files = {
             "image": ("image.png", image_bytes, "image/png")
         }
         
-        # 2. 处理遮罩 (Mask)
+        # 2. Handle mask image
         mask_path = kwargs.get("mask_path")
         if mask_path and os.path.exists(mask_path):
             with open(mask_path, "rb") as f:
                 mask_bytes = f.read()
             files["mask"] = (os.path.basename(mask_path), mask_bytes, "image/png")
             
-        # 3. 构造表单数据 (Data)
+        # 3. Construct form data
         data = {
             "model": model,
             "prompt": prompt,
@@ -614,17 +614,17 @@ class ApiYiGPTImageProvider(AIProviderStrategy):
             "size": kwargs.get("size", "1024x1024"),
         }
         
-        # 添加可选参数 (白名单过滤)
-        supported_params = ["response_format", "user"] # 尽管 Generation 不支持 response_format，但 Edit 标准通常支持，保留以防万一或稍后测试
-        # 如果 GPT-Image Edit 同样不支持 response_format，稍后也应移除。
-        # 安全起见，为了和 Generation 保持一致，这里暂时不包含 response_format，除非文档明确说 Edit 支持。
-        # 文档确实提到了 response_format 参数在 Edit API 中。
-        # 但鉴于 Generation 报错，我们先尝试不传，或仅在 kwargs 明确有的时候传。
+        # Add optional parameters (Whitelist filtering)
+        supported_params = ["response_format", "user"] # Standard Edit API usually supports response_format, kept just in case or for later testing
+        # If GPT-Image Edit similarly doesn't support response_format, it should be removed later.
+        # For safety, mirroring Generation, we temporarily exclude response_format unless documentation explicitly states Edit support.
+        # Documentation indeed mentioned response_format in the Edit API.
+        # But given Generation failed, we try without it first, or only pass when explicitly in kwargs.
         
         if "user" in kwargs:
             data["user"] = kwargs["user"]
             
-        # 构造特殊返回 Payload
+        # Construct special return payload
         payload = {
             "__is_multipart__": True,
             "files": files,
@@ -645,8 +645,8 @@ class ApiYiGPTImageProvider(AIProviderStrategy):
 
 class OpenAIDalleProvider(AIProviderStrategy):
     """
-    OpenAI DALL-E 系列 (images/generations)
-    注意：DALL-E 仅支持生成，不支持理解/Chat
+    OpenAI DALL-E series (images/generations)
+    Note: DALL-E only supports generation, not understanding/Chat
     """
     def match(self, api_url: str, model: str) -> bool:
         return model.lower().startswith(('dall-e', 'dall-e-2', 'dall-e-3'))
@@ -682,9 +682,9 @@ class OpenAIDalleProvider(AIProviderStrategy):
 
 class OpenAICompatGeminiProvider(AIProviderStrategy):
     """
-    通用 OpenAI 兼容格式
-    生图：chat/completions (image response)
-    理解：chat/completions (text response)
+    Common OpenAI compatible format
+    Generation: chat/completions (image response)
+    Understanding: chat/completions (text response)
     """
     def match(self, api_url: str, model: str) -> bool:
         # Always True as fallback if no others match
@@ -783,7 +783,7 @@ class OpenAICompatGeminiProvider(AIProviderStrategy):
 
 class GoogleNativeProvider(AIProviderStrategy):
     """
-    Google 官方 Gemini API 
+    Google Official Gemini API 
     """
     def match(self, api_url: str, model: str) -> bool:
         return "googleapis.com" in api_url and is_gemini_model(model)
@@ -807,7 +807,7 @@ class GoogleNativeProvider(AIProviderStrategy):
     # Native Chat Implementation can also be added here (e.g., converting messages to contents)
 
 
-# 注册顺序
+# Strategy registration order
 STRATEGIES = [
     ApiYiGeminiProvider(),
     ApiYiSeeDreamProvider(),
@@ -817,12 +817,6 @@ STRATEGIES = [
     # Add GoogleNativeProvider() here if needed
     OpenAICompatGeminiProvider(), # Default Fallback
 ]
-
-def get_provider(api_url: str, model: str) -> AIProviderStrategy:
-    for strategy in STRATEGIES:
-        if strategy.match(api_url, model):
-            return strategy
-    return OpenAICompatGeminiProvider()
 
 def get_provider(api_url: str, model: str) -> AIProviderStrategy:
     for strategy in STRATEGIES:

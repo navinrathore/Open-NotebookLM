@@ -1,5 +1,5 @@
 """
-paper2ppt 业务 Service 层（满血版：分步 page-content / generate / outline-refine）。
+paper2ppt Business Service Layer (Full version: step-by-step page-content / generate / outline-refine).
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ BASE_OUTPUT_DIR = (PROJECT_ROOT / "outputs").resolve()
 
 
 class Paper2PPTService:
-    """paper2ppt 业务编排：page-content / generate / outline-refine / full-pipeline。"""
+    """paper2ppt business orchestration: page-content / generate / outline-refine / full-pipeline."""
 
     async def get_page_content(
         self,
@@ -41,7 +41,7 @@ class Paper2PPTService:
         reference_img: UploadFile | None,
         request: Request | None,
     ) -> Dict[str, Any]:
-        """只跑 pagecontent（paper2page_content 工作流）。"""
+        """Runs only pagecontent (paper2page_content workflow)."""
         run_dir = self._create_timestamp_run_dir(req.email)
         input_dir = run_dir / "input"
         input_dir.mkdir(parents=True, exist_ok=True)
@@ -96,7 +96,7 @@ class Paper2PPTService:
         req: OutlineRefineRequest,
         request: Request | None,
     ) -> Dict[str, Any]:
-        """根据反馈修订 outline，不重新解析输入。"""
+        """Refines outline based on feedback, without re-parsing input."""
         if not req.outline_feedback.strip():
             raise HTTPException(status_code=400, detail="outline_feedback is required")
 
@@ -151,7 +151,7 @@ class Paper2PPTService:
         reference_img: UploadFile | None,
         request: Request | None,
     ) -> Dict[str, Any]:
-        """只跑 PPT 生成/编辑（paper2ppt 工作流）。"""
+        """Runs only PPT generation/editing (paper2ppt workflow)."""
         base_dir = Path(req.result_path)
         if not base_dir.is_absolute():
             base_dir = PROJECT_ROOT / base_dir
@@ -231,7 +231,7 @@ class Paper2PPTService:
         file: UploadFile | None,
         request: Request | None,
     ) -> Dict[str, Any]:
-        """full pipeline：一次性跑完 pagecontent + ppt。"""
+        """full pipeline: Runs pagecontent + ppt in one go."""
         run_dir = self._create_timestamp_run_dir(req.email)
         input_dir = run_dir / "input"
         input_dir.mkdir(parents=True, exist_ok=True)

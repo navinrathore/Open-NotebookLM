@@ -1,6 +1,6 @@
 """
-Paper2Drawio API：AI 驱动 DrawIO 图表生成。
-供 Notebook LM Studio 功能卡片调用。
+Paper2Drawio API: AI-driven DrawIO diagram generation.
+Invoked by Notebook LM Studio feature cards.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/paper2drawio", tags=["paper2drawio"])
 
 
 class ChatRequest(BaseModel):
-    """对话编辑请求"""
+    """Chat edit request"""
     current_xml: str = ""
     message: str = ""
     chat_history: List[Dict[str, str]] = []
@@ -25,7 +25,7 @@ class ChatRequest(BaseModel):
 
 
 class ExportRequest(BaseModel):
-    """导出请求"""
+    """Export request"""
     xml_content: str = ""
     format: str = "drawio"
     filename: str = "diagram"
@@ -43,12 +43,12 @@ async def generate_diagram(
     input_type: str = Form("TEXT"),
     diagram_type: str = Form("auto"),
     diagram_style: str = Form("default"),
-    language: str = Form("zh"),
+    language: str = Form("en"),
     email: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     text_content: Optional[str] = Form(None),
 ):
-    """生成 DrawIO 图表。支持 Form（含 file）或仅 text_content。"""
+    """Generate DrawIO diagrams. Supports Form (with file) or text_content."""
     from fastapi_app.services.paper2drawio_service import Paper2DrawioService
 
     try:
@@ -80,7 +80,7 @@ async def generate_diagram(
 
 @router.post("/chat")
 async def chat_edit_diagram(request: Request, body: ChatRequest):
-    """对话式编辑图表"""
+    """Conversational diagram editing"""
     from fastapi_app.services.paper2drawio_service import Paper2DrawioService
 
     service = Paper2DrawioService()
@@ -97,7 +97,7 @@ async def chat_edit_diagram(request: Request, body: ChatRequest):
 
 @router.post("/export")
 async def export_diagram(request: Request, body: ExportRequest):
-    """导出图表为指定格式"""
+    """Export diagram to specified format"""
     from fastapi_app.services.paper2drawio_service import Paper2DrawioService
 
     service = Paper2DrawioService()

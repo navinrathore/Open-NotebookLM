@@ -1,5 +1,5 @@
 """
-Paper2PPT 满血 API：分步 page-content / generate / outline-refine / 版本历史。
+Paper2PPT API: Step-by-step page-content / generate / outline-refine / version history.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ async def paper2ppt_pagecontent(
     file: Optional[UploadFile] = File(None),
     text: Optional[str] = Form(None),
     model: str = Form("deepseek-v3.2"),
-    language: str = Form("zh"),
+    language: str = Form("en"),
     style: str = Form(""),
     reference_img: Optional[UploadFile] = File(None),
     gen_fig_model: str = Form(...),
@@ -45,7 +45,7 @@ async def paper2ppt_pagecontent(
     render_dpi: Optional[int] = Form(None),
     service: Paper2PPTService = Depends(get_service),
 ):
-    """只跑 paper2page_content，返回 pagecontent + result_path。"""
+    """Run paper2page_content only, returns pagecontent + result_path."""
     req = PageContentRequest(
         chat_api_url=chat_api_url,
         api_key=api_key,
@@ -78,7 +78,7 @@ async def paper2ppt_generate(
     style: str = Form(""),
     reference_img: Optional[UploadFile] = File(None),
     aspect_ratio: str = Form("16:9"),
-    language: str = Form("zh"),
+    language: str = Form("en"),
     model: str = Form("deepseek-v3.2"),
     image_resolution: Optional[str] = Form(None),
     get_down: str = Form("false"),
@@ -89,7 +89,7 @@ async def paper2ppt_generate(
     edit_prompt: Optional[str] = Form(None),
     service: Paper2PPTService = Depends(get_service),
 ):
-    """只跑 paper2ppt：get_down=false 生成模式，get_down=true 编辑单页。"""
+    """Run paper2ppt only: get_down=false for generation mode, get_down=true for editing a single page."""
     req = PPTGenerationRequest(
         img_gen_model_name=img_gen_model_name,
         chat_api_url=chat_api_url,
@@ -123,11 +123,11 @@ async def paper2ppt_outline_refine(
     api_key: str = Form(...),
     email: Optional[str] = Form(None),
     model: str = Form("deepseek-v3.2"),
-    language: str = Form("zh"),
+    language: str = Form("en"),
     result_path: Optional[str] = Form(None),
     service: Paper2PPTService = Depends(get_service),
 ):
-    """根据反馈修订 outline，不重新解析输入。"""
+    """Refine outline based on feedback, without re-parsing input."""
     req = OutlineRefineRequest(
         chat_api_url=chat_api_url,
         api_key=api_key,
@@ -155,14 +155,14 @@ async def paper2ppt_full(
     input_type: str = Form(...),
     file: Optional[UploadFile] = File(None),
     text: Optional[str] = Form(None),
-    language: str = Form("zh"),
+    language: str = Form("en"),
     aspect_ratio: str = Form("16:9"),
     style: str = Form(""),
     model: str = Form("deepseek-v3.2"),
     use_long_paper: str = Form("false"),
     service: Paper2PPTService = Depends(get_service),
 ):
-    """一次性跑完 pagecontent + paper2ppt（满血 one-shot）。"""
+    """Run pagecontent + paper2ppt in one-shot."""
     req = FullPipelineRequest(
         img_gen_model_name=img_gen_model_name,
         chat_api_url=chat_api_url,
@@ -189,12 +189,12 @@ async def get_version_history(
     page_id: int,
     request: Request,
 ):
-    """获取指定页面的版本历史。"""
+    """Get version history for a specified page."""
     try:
         decoded_path = base64.b64decode(encoded_path).decode("utf-8")
         img_dir = Path(decoded_path) / "ppt_pages"
         if not img_dir.exists():
-            raise HTTPException(status_code=404, detail="图片目录不存在")
+            raise HTTPException(status_code=404, detail="Image directory does not exist")
         history = ImageVersionManager.get_version_history(img_dir, page_id)
         for item in history:
             item["imageUrl"] = _to_outputs_url(item["image_path"], request)
@@ -216,14 +216,14 @@ async def revert_to_version(
     page_id: int = Form(...),
     target_version: int = Form(...),
 ):
-    """将页面恢复到指定版本。"""
+    """Revert page to a specified version."""
     try:
         img_dir = Path(result_path) / "ppt_pages"
         if not img_dir.exists():
-            raise HTTPException(status_code=404, detail="图片目录不存在")
+            raise HTTPException(status_code=404, detail="Image directory does not exist")
         reverted_path = ImageVersionManager.revert_to_version(img_dir, page_id, target_version)
         if not reverted_path:
-            raise HTTPException(status_code=404, detail="指定版本不存在")
+            raise HTTPException(status_code=404, detail="Specified version does not exist")
         image_url = _to_outputs_url(reverted_path, request)
         return {"success": True, "currentImageUrl": image_url, "revertedToVersion": target_version}
     except HTTPException:

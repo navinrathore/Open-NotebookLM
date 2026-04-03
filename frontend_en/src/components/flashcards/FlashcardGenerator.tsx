@@ -28,7 +28,7 @@ export const FlashcardGenerator: React.FC<FlashcardGeneratorProps> = ({
       return;
     }
 
-    // 获取 API 配置
+    // Get API configuration
     const settings = getApiSettings(userId);
     if (!settings?.apiUrl || !settings?.apiKey) {
       setError('Please configure API URL and API Key in Settings first');

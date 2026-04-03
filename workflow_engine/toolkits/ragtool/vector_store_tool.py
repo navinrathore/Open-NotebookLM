@@ -102,6 +102,11 @@ class VectorStoreManager:
         else:
             self.multimodal_api_url = self.embedding_api_url
         
+        # Local Embedding Engine configuration (from .env)
+        # USE_EMBEDDING_LIBRARY=1 activates the local SentenceTransformers CPU-mode
+        self.use_local_library_embedding = int(os.getenv("USE_EMBEDDING_LIBRARY", "0"))
+        self._local_embedding_model_instance = None # Lazy loaded
+        
         # Directories
         self.processed_dir = self.base_dir / "processed"
         self.vector_store_dir = self.base_dir / "vector_store"
@@ -214,7 +219,7 @@ class VectorStoreManager:
 
         # 1. Embed query
         query_vecs = self._call_embedding_api([query])
-        if len(query_vecs) == 0:
+        if query_vecs is None or len(query_vecs) == 0:
             return []
             
         # 2. Determine search k (expand if filtering)
@@ -263,23 +268,47 @@ class VectorStoreManager:
         return results
 
     def _call_embedding_api(self, texts: List[str]) -> np.ndarray:
-        """Call Embedding API (OpenAI compatible)."""
+        """
+        Calculates embeddings for the provided texts. 
+        Will use local SentenceTransformer if USE_LOCAL_EMBEDDING=1, 
+        otherwise falls back to the remote OpenAI-compatible API.
+        """
         if not texts:
             return np.array([])
             
+        # 1. Option: Local CPU-only Embedding (Free/Private)
+        if self.use_local_library_embedding:
+            try:
+                if self._local_embedding_model_instance is None:
+                    from sentence_transformers import SentenceTransformer
+                    log.info(f"Loading local embedding model: {self.embedding_model}")
+                    self._local_embedding_model_instance = SentenceTransformer(self.embedding_model)
+                
+                # Encode on CPU
+                vecs = self._local_embedding_model_instance.encode(texts)
+                arr = np.asarray(vecs, dtype=np.float32)
+                if arr.ndim == 1:
+                    arr = arr.reshape(1, -1)
+                
+                # Normalize (Faiss IndexFlatIP uses Inner Product, so L2 norm = Cosine Similarity)
+                if len(arr) > 0:
+                    faiss.normalize_L2(arr)
+                return arr
+            except Exception as e:
+                log.error(f"Local embedding failed: {e}. Falling back to API.")
+
+        # 2. Option: Remote API (OpenAI/HuggingFace Proxy)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
         
         vecs = []
-        # Batch processing to avoid payload limits
         batch_size = 10 
         
         with httpx.Client(timeout=60.0) as client:
             for i in range(0, len(texts), batch_size):
                 batch = texts[i:i+batch_size]
-                # Replace newlines which can negatively affect performance
                 batch = [t.replace("\n", " ") for t in batch]
                 
                 try:
@@ -295,7 +324,6 @@ class VectorStoreManager:
                         raise RuntimeError(
                             f"Embedding API returned {len(data_items)} vectors for {len(batch)} inputs"
                         )
-                    # Ensure order is preserved
                     batch_vecs = [item["embedding"] for item in data_items]
                     vecs.extend(batch_vecs)
                 except Exception as e:
@@ -312,13 +340,7 @@ class VectorStoreManager:
             try:
                 faiss.normalize_L2(arr)
             except Exception as e:
-                log.exception(
-                    "Faiss normalize_L2 failed: shape=%s dtype=%s min=%s max=%s",
-                    getattr(arr, "shape", None),
-                    getattr(arr, "dtype", None),
-                    float(np.min(arr)) if arr.size else None,
-                    float(np.max(arr)) if arr.size else None,
-                )
+                log.exception("Faiss normalize_L2 failed")
                 raise
         return arr
 

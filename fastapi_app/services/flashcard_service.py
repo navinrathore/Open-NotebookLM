@@ -1,6 +1,6 @@
 """
-闪卡生成服务
-从知识库文档中提取关键概念并生成闪卡
+Flashcard Generation Service
+Extracts key concepts from knowledge base documents and generates flashcards.
 """
 import json
 import re
@@ -24,38 +24,38 @@ async def generate_flashcards_with_llm(
     card_count: int,
 ) -> List[Flashcard]:
     """
-    使用 LLM 从文本内容生成闪卡
+    Generate flashcards from text content using LLM.
 
     Args:
-        text_content: 文档文本内容
-        api_url: LLM API 地址
-        api_key: API 密钥
-        model: 模型名称
-        language: 语言（zh/en）
-        card_count: 生成闪卡数量
+        text_content: Document text content
+        api_url: LLM API URL
+        api_key: API Key
+        model: Model name
+        language: Language (zh/en)
+        card_count: Number of flashcards to generate
 
     Returns:
-        闪卡列表
+        List of Flashcards
     """
-    # 限制文本长度，避免超出 token 限制
+    # Limit text length to avoid token limits
     max_chars = 10000
     if len(text_content) > max_chars:
         text_content = text_content[:max_chars] + "..."
 
-    # 构建 Prompt
+    # Build Prompt
     prompt = _build_flashcard_prompt(text_content, language, card_count)
 
-    log.info(f"[flashcard_service] 开始调用 LLM 生成闪卡，模型: {model}, 数量: {card_count}")
+    log.info(f"[flashcard_service] Starting LLM call for Flashcards, model: {model}, count: {card_count}")
 
     try:
-        # 确保 API URL 包含完整路径
+        # Ensure API URL contains full path
         if not api_url.endswith('/chat/completions'):
             if api_url.endswith('/'):
                 api_url = api_url + 'chat/completions'
             else:
                 api_url = api_url + '/chat/completions'
 
-        # 调用 LLM API
+        # Call LLM API
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -71,59 +71,59 @@ async def generate_flashcards_with_llm(
             response.raise_for_status()
             result = response.json()
 
-        # 解析 LLM 返回的内容
+        # Parse LLM response
         content = result["choices"][0]["message"]["content"]
         flashcards = _parse_flashcards_from_llm_response(content, card_count)
 
-        log.info(f"[flashcard_service] 成功生成 {len(flashcards)} 张闪卡")
+        log.info(f"[flashcard_service] Successfully generated {len(flashcards)} flashcards")
         return flashcards
 
     except Exception as e:
-        log.error(f"[flashcard_service] LLM 调用失败: {e}")
-        raise Exception(f"生成闪卡失败: {str(e)}")
+        log.error(f"[flashcard_service] LLM call failed: {e}")
+        raise Exception(f"Failed to generate flashcards: {str(e)}")
 
 
 def _build_flashcard_prompt(text_content: str, language: str, card_count: int) -> str:
-    """构建生成闪卡的 Prompt"""
-    lang_name = "中文" if language == "zh" else "English"
+    """Build prompt for flashcard generation."""
+    lang_name = "Chinese" if language == "zh" else "English"
 
-    prompt = f"""你是一个专业的教育内容专家，擅长从学习材料中提取关键知识点并制作闪卡。
+    prompt = f"""You are a professional educational content expert, skilled at extracting key knowledge points from materials and creating flashcards.
 
-请从以下内容中提取 {card_count} 个最重要的知识点，并为每个知识点生成一张闪卡。
+Please extract {card_count} most important knowledge points from the content below and generate a flashcard for each.
 
-要求：
-1. 问题要清晰、具体，便于记忆和理解
-2. 答案要准确、简洁（100字以内）
-3. 优先选择核心概念、定义、重要事实、关键术语
-4. 问题和答案使用{lang_name}
-5. 可以包含不同类型的问题（概念解释、填空、问答等）
+Requirements:
+1. Question must be clear, specific, and easy to remember.
+2. Answer must be accurate and concise (under 100 words).
+3. Prioritize core concepts, definitions, important facts, and key terms.
+4. Use {lang_name} for questions and answers.
+5. Can include different types of questions (concept explanation, fill-in-the-blank, Q&A, etc.).
 
-内容：
+Content:
 {text_content}
 
-请以 JSON 数组格式返回，每个闪卡包含以下字段：
-- question: 问题内容
-- answer: 答案内容
-- type: 类型（qa/concept/fill_blank）
-- source_excerpt: 相关原文摘录（可选，最多100字）
+Please return in JSON array format, each flashcard containing:
+- question: Question text
+- answer: Answer text
+- type: Type (qa/concept/fill_blank)
+- source_excerpt: Relevant excerpt from the source (optional, max 100 words)
 
-示例格式：
+Example Format:
 [
   {{
-    "question": "什么是机器学习？",
-    "answer": "机器学习是人工智能的一个分支，通过算法让计算机从数据中学习规律。",
+    "question": "What is machine learning?",
+    "answer": "Machine learning is a branch of AI that uses algorithms to allow computers to learn patterns from data.",
     "type": "qa",
-    "source_excerpt": "机器学习（Machine Learning）是..."
+    "source_excerpt": "Machine Learning is..."
   }}
 ]
 
-请直接返回 JSON 数组，不要添加其他说明文字。"""
+Return only the JSON array, no extra explanation."""
 
     return prompt
 
 
 def _try_parse_json_array(json_str: str):
-    """尝试解析 JSON 数组，失败时逐步回退到最后一个完整对象"""
+    """Attempt to parse JSON array, back off to the last complete object if needed."""
     try:
         return json.loads(json_str)
     except json.JSONDecodeError:
@@ -164,29 +164,29 @@ def _try_parse_json_array(json_str: str):
 
 def _parse_flashcards_from_llm_response(content: str, card_count: int) -> List[Flashcard]:
     """
-    解析 LLM 返回的闪卡数据
+    Parse flashcard data from LLM response.
 
     Args:
-        content: LLM 返回的文本内容
-        card_count: 期望的闪卡数量
+        content: LLM response content
+        card_count: Expected flashcard count
 
     Returns:
-        闪卡列表
+        List of Flashcards
     """
     try:
-        # 提取 JSON（处理可能的 markdown 代码块）
+        # Extract JSON (handling possible markdown blocks)
         json_match = re.search(r'```(?:json)?\s*(\[[\s\S]*)', content)
         if json_match:
             json_str = json_match.group(1)
             json_str = re.sub(r'\s*```\s*$', '', json_str)
         else:
-            # fallback: 找 [ 开头的内容
+            # fallback: find starting [
             idx = content.find('[')
             json_str = content[idx:] if idx >= 0 else content.strip()
 
         flashcards_data = _try_parse_json_array(json_str)
 
-        # 转换为 Flashcard 对象
+        # Convert to Flashcard objects
         flashcards = []
         for i, card_data in enumerate(flashcards_data[:card_count]):
             question = card_data.get("question", "").strip()
@@ -207,5 +207,5 @@ def _parse_flashcards_from_llm_response(content: str, card_count: int) -> List[F
         return flashcards
 
     except Exception as e:
-        log.error(f"[flashcard_service] 解析 LLM 响应失败: {e}")
-        raise Exception(f"解析闪卡数据失败: {str(e)}")
+        log.error(f"[flashcard_service] Failed to parse LLM response: {e}")
+        raise Exception(f"Failed to parse flashcard data: {str(e)}")

@@ -21,7 +21,7 @@ async def _post_stream_and_accumulate(
     timeout: int,
 ) -> dict:
     """
-    处理流式响应，累积 content 并返回类似非流式的响应结构
+    Handles streaming response, accumulates content and returns a non-streaming response structure
     """
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -49,7 +49,7 @@ async def _post_stream_and_accumulate(
                         
                     try:
                         chunk = json.loads(line)
-                        # 处理 OpenAI 兼容的流式格式 choices[0].delta.content
+                        # Handle OpenAI compatible stream format choices[0].delta.content
                         if "choices" in chunk and len(chunk["choices"]) > 0:
                             delta = chunk["choices"][0].get("delta", {})
                             content = delta.get("content", "")
@@ -61,7 +61,7 @@ async def _post_stream_and_accumulate(
                         
             joined_content = "".join(full_content)
             
-            # 构造兼容非流式解析的返回结构
+            # Construct return structure compatible with non-streaming parsing
             return {
                 "choices": [
                     {
@@ -75,7 +75,7 @@ async def _post_stream_and_accumulate(
             
         except httpx.HTTPStatusError as e:
             log.error(f"HTTPError {e}")
-            await response.aread() # 确保读取响应体以便打印
+            await response.aread() # Ensure response body is read for printing
             log.error(f"Response body: {response.text}")
             raise
 
@@ -86,7 +86,7 @@ async def _post_raw(
     timeout: int,
 ) -> dict:
     """
-    统一的 POST，不拼接路径，由调用方传入完整 URL
+    Unified POST, does not prepend path, full URL is passed by caller
     """
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -95,7 +95,7 @@ async def _post_raw(
 
     log.info(f"POST {url}")
     
-    # 调试打印 payload，截断 base64
+    # Debug print payload, truncate base64
     try:
         debug_payload = json.loads(json.dumps(payload))
         if "messages" in debug_payload:
@@ -129,7 +129,7 @@ async def _post_raw(
 
 def _is_dalle_model(model: str) -> bool:
     """
-    判断是否为DALL-E系列模型
+    Determines if it is a DALL-E series model
     """
     return model.lower().startswith(('dall-e', 'dall-e-2', 'dall-e-3'))
 
@@ -145,7 +145,7 @@ async def call_dalle_image_edit_async(
     timeout: int = 120,
 ) -> str:
     """
-    DALL-E 图像编辑 (保留特殊逻辑：Multipart Form Data)
+    DALL-E image edit (Retain special logic: Multipart Form Data)
     """
     url = f"{api_url.rstrip('/')}/images/edits"
     headers = {
@@ -203,7 +203,7 @@ async def gemini_multi_image_edit_async(
     timeout: int = 300,
 ) -> str:
     """
-    专门针对 Gemini 的多图编辑
+    Specialized multi-image edit for Gemini
     """
     image_b64_list = []
     for img_path in image_paths:
@@ -213,7 +213,7 @@ async def gemini_multi_image_edit_async(
         b64, fmt = _encode_image_to_base64(img_path)
         image_b64_list.append((b64, fmt))
         
-    # 根据 Provider 选择策略
+    # Select strategy based on Provider
     provider = get_provider(api_url, model)
     log.info(f"Multi-Image Edit using Provider: {provider.__class__.__name__}")
     
@@ -226,7 +226,7 @@ async def gemini_multi_image_edit_async(
         resolution=resolution
     )
     
-    # 动态超时调整 (针对 Gemini-3 Pro)
+    # Dynamic timeout adjustment (for Gemini-3 Pro)
     if is_gemini_3_pro(model):
         timeout_map = {"1K": 180, "2K": 300, "4K": 360}
         timeout = max(timeout, timeout_map.get(resolution, 300))
@@ -275,36 +275,36 @@ async def generate_or_edit_and_save_image_async(
     **kwargs,
 ) -> str:
     """
-    根据模型类型选择不同的API进行图像生成/编辑
-    重构后：使用 Strategy Pattern 自动匹配 Provider
+    Selects different APIs for image generation/editing based on model type
+    After refactoring: use Strategy Pattern to automatically match Provider
     """
     
-    # 动态调整超时（保留原有针对 Gemini-3 Pro 的逻辑）
+    # Dynamic timeout adjustment (retain original logic for Gemini-3 Pro)
     if _is_gemini_model(model) and is_gemini_3_pro(model):
         timeout_map = {"1K": 40, "2K": 180, "4K": 350}
         timeout = timeout_map.get(resolution, 180)
     
     log.info(f"generate_or_edit: model={model}, provider_check={detect_provider(api_url)}")
 
-    # 特殊情况处理：DALL-E Edit (Multipart)
-    # 目前 Provider 接口仅支持 JSON payload，所以 Multipart 仍需单独处理
+    # Special case processing: DALL-E Edit (Multipart)
+    # Currently Provider interface only supports JSON payload, so Multipart still needs separate handling
     if _is_dalle_model(model) and use_edit:
         if not image_path:
-            raise ValueError("DALL-E Edit模式必须提供image_path")
+            raise ValueError("DALL-E Edit mode must provide image_path")
         b64 = await call_dalle_image_edit_async(
             api_url, api_key, model, prompt, image_path, mask_path, 
             size, response_format, timeout
         )
     else:
-        # 通用流程：使用 Strategy Pattern
+        # Universal flow: use Strategy Pattern
         provider = get_provider(api_url, model)
         log.info(f"Selected Provider: {provider.__class__.__name__}")
 
         if use_edit:
             if not image_path:
-                raise ValueError("Edit模式必须提供image_path")
+                raise ValueError("Edit mode must provide image_path")
             
-            # 读取并编码图片
+            # Read and encode image
             b64_input, fmt = _encode_image_to_base64(image_path)
             
             url, payload, is_stream = provider.build_edit_request(
@@ -319,11 +319,11 @@ async def generate_or_edit_and_save_image_async(
                 quality=quality,
                 style=style,
                 response_format=response_format,
-                mask_path=mask_path,  # 显式传递 mask_path
+                mask_path=mask_path,  # Explicitly pass mask_path
                 **kwargs
             )
         else:
-            # 文生图
+            # Text-to-Image
             url, payload, is_stream = provider.build_generation_request(
                 api_url=api_url,
                 model=model,
@@ -337,41 +337,41 @@ async def generate_or_edit_and_save_image_async(
                 **kwargs
             )
 
-        # 发送请求
-        if payload.get("__is_multipart__"):
-            # 处理 Multipart 上传请求 (Provider 返回了特殊标记)
-            log.info(f"POST Multipart {url}")
-            
-            files = payload.get("files", {})
-            data = payload.get("data", {})
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-            }
-            
-            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
-                try:
-                    resp = await client.post(url, headers=headers, data=data, files=files)
-                    log.info(f"status={resp.status_code}")
-                    resp.raise_for_status()
-                    resp_data = resp.json()
-                except httpx.HTTPStatusError as e:
-                    log.error(f"HTTPError {e}")
-                    log.error(f"Response body: {e.response.text}")
-                    raise
-        elif is_stream:
-            resp_data = await _post_stream_and_accumulate(url, api_key, payload, timeout)
-        else:
-            resp_data = await _post_raw(url, api_key, payload, timeout)
+    # Send request
+    if payload.get("__is_multipart__"):
+        # Handle Multipart upload request (Provider returned special marker)
+        log.info(f"POST Multipart {url}")
+        
+        files = payload.get("files", {})
+        data = payload.get("data", {})
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+        }
+        
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
+            try:
+                resp = await client.post(url, headers=headers, data=data, files=files)
+                log.info(f"status={resp.status_code}")
+                resp.raise_for_status()
+                resp_data = resp.json()
+            except httpx.HTTPStatusError as e:
+                log.error(f"HTTPError {e}")
+                log.error(f"Response body: {e.response.text}")
+                raise
+    elif is_stream:
+        resp_data = await _post_stream_and_accumulate(url, api_key, payload, timeout)
+    else:
+        resp_data = await _post_raw(url, api_key, payload, timeout)
 
-        # 解析响应
-        # 如果是 Multipart (通常是 OpenAI 格式)，也使用相同的解析逻辑
-        # 因为 DALL-E/GPT-Image 的返回结构通常是一样的
-        b64 = provider.parse_generation_response(resp_data)
+    # Parse response
+    # If it is Multipart (usually OpenAI format), also use the same parsing logic
+    # Because DALL-E/GPT-Image return structure is usually the same
+    b64 = provider.parse_generation_response(resp_data)
 
-    # 保存文件
+    # Save file
     os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
     
-    # 检查是否返回的是 URL (例如 GPT-Image-1)
+    # Check if a URL is returned (e.g., GPT-Image-1)
     if b64.startswith("http"):
         log.info(f"Received URL, downloading image: {b64}")
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
@@ -379,13 +379,13 @@ async def generate_or_edit_and_save_image_async(
             resp.raise_for_status()
             with open(save_path, "wb") as f:
                 f.write(resp.content)
-            # 同时更新 b64 变量为实际的 base64 内容，以便保持返回值一致性
+            # Also update b64 variable with actual base64 content to maintain consistency of return value
             b64 = base64.b64encode(resp.content).decode("utf-8")
     else:
         with open(save_path, "wb") as f:
             f.write(base64.b64decode(b64))
 
-    log.info(f"图片已保存至 {save_path}")
+    log.info(f"Image saved to {save_path}")
     return b64
 
 if __name__ == "__main__":
@@ -395,7 +395,7 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    # --- 辅助函数：创建测试图片 ---
+    # --- Helper function: Create test image ---
     def create_dummy_image(path: str, color='blue', size=(256, 256)):
         if not os.path.exists(path):
             img = Image.new('RGB', size, color=color)
@@ -406,7 +406,7 @@ if __name__ == "__main__":
     async def _test():
         API_URL = os.getenv("DF_API_URL", "http://127.0.0.1:3000/v1")
         API_KEY = os.getenv("DF_API_KEY", "sk-xxx")
-        # 修改测试模型为文档推荐的 gpt-image-1
+        # Change test model to the recommended gpt-image-1 as per documentation
         MODEL = os.getenv("DF_IMG_MODEL", "gpt-image-1") 
 
         print(f"--- Config ---")
@@ -414,10 +414,10 @@ if __name__ == "__main__":
         print(f"Model: {MODEL}")
         print(f"----------------")
 
-        # 1. 测试文生图
+        # 1. Test Text-to-Image
         print("\n[1] Testing Text-to-Image Generation...")
         
-        # 针对 SeeDream 模型的特殊处理
+        # Special handling for SeeDream models
         gen_kwargs = {
             "prompt": "A futuristic cityscape with neon lights, cyberpunk style",
             "save_path": "./test_gen_result.png",
@@ -438,7 +438,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f">> Generation Failed: {e}")
 
-        # 2. 测试图生图 (Edit)
+        # 2. Test Image-to-Image (Edit)
         print("\n[2] Testing Image Editing...")
         dummy_input = f"{get_project_root()}/tests/test_02.png"
         try:
@@ -455,8 +455,8 @@ if __name__ == "__main__":
         except Exception as e:
             print(f">> Edit Failed: {e}")
 
-        # 3. 测试多图编辑 (Gemini Specific)
-        # 仅当模型是 gemini 时测试
+        # 3. Test Multi-Image Edit (Gemini Specific)
+        # Test only when model is gemini
         if "gemini" in MODEL.lower():
             print("\n[3] Testing Multi-Image Edit (Gemini Specific)...")
             img1 = f"{get_project_root()}/tests/test_02.png"

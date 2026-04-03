@@ -59,7 +59,7 @@ Citation rules:
 - Do NOT use filenames as citations. Only use the numbered format [1], [2], etc.
 - Do NOT add a "References" or "来源" section at the end of your answer. Only use inline citations.
 
-Answer in the same language as the user's question (likely Chinese).
+Answer in English and only English for all legal queries.
 """
 
     # Default task prompt if needed
@@ -78,7 +78,7 @@ class KbPromptAgent:
     """
 
     system_prompt_for_kb_prompt_agent = """
-You are a helpful AI assistant. Follow the user's instructions carefully and provide accurate, helpful responses.
+You are a helpful AI assistant. ALL responses MUST be in English. Follow the user's instructions carefully and provide accurate, helpful responses.
 """
 
     task_prompt_for_kb_prompt_agent = """

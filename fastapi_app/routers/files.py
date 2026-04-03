@@ -34,8 +34,8 @@ async def stream_file(
     url: str = "",
 ) -> FileResponse:
     """
-    根据 URL 流式返回文件（用于前端预览）。
-    url 通常为 /outputs/... 或完整 http URL，会解析为本地路径后返回文件。
+    Stream file back according to URL (for frontend preview).
+    URL is typically /outputs/... or a full HTTP URL; it will be resolved to a local path then streamed.
     """
     if not url:
         raise HTTPException(status_code=400, detail="Missing url parameter")

@@ -31,6 +31,7 @@ EXCLUDED_PATHS = {
     "/openapi.json",
     "/redoc",
     "/api/v1/auth/config",
+    "/api/v1/files/download",
 }
 
 # Path prefixes that don't require API key
@@ -66,7 +67,7 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         # Only check API key for /api/* and /paper2video/* routes
         if path.startswith("/api/") or path.startswith("/paper2video/"):
             api_key = request.headers.get("X-API-Key")
-            # EventSource 无法带自定义头，progress SSE 允许通过 query 传 key
+            # EventSource cannot carry custom headers; progress SSE allows key via query param
             if not api_key and request.method == "GET" and "/paper2rebuttal/progress/" in path:
                 api_key = request.query_params.get("x_api_key") or request.query_params.get("X-API-Key")
 

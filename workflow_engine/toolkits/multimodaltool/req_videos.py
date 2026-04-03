@@ -11,12 +11,12 @@ log = get_logger(__name__)
 
 def _compress_video(input_path: str) -> str:
     """
-    使用 ffmpeg 压缩视频。
-    返回压缩后的临时文件路径，如果失败返回原路径。
+    Compress video using ffmpeg.
+    Returns the path of the compressed temporary file, or the original path if it fails.
     """
     output_path = f"/tmp/compressed_{uuid.uuid4()}.mp4"
     
-    # 压缩策略：缩放至720p，CRF 28 (平衡画质与大小)
+    # Compression strategy: scale to 720p, CRF 28 (balance quality and size)
     cmd = [
         "ffmpeg", "-y", "-i", input_path,
         "-c:v", "libx264", "-crf", "28", "-preset", "faster",
@@ -41,15 +41,15 @@ def _compress_video(input_path: str) -> str:
 
 def _encode_video_to_base64(video_path: str) -> tuple[str, str]:
     """
-    读取视频文件并编码为Base64。如果视频大于20MB，尝试自动压缩。
-    返回: (base64_str, mime_type)
+    Read video file and encode as Base64. If the video is larger than 20MB, attempt automatic compression.
+    Returns: (base64_str, mime_type)
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
         
     ext = video_path.rsplit(".", 1)[-1].lower()
     
-    # 默认 MIME 类型处理
+    # Default MIME type handling
     mime_map = {
         "mp4": "video/mp4",
         "mov": "video/quicktime",
@@ -62,7 +62,7 @@ def _encode_video_to_base64(video_path: str) -> tuple[str, str]:
     if ext not in mime_map:
         log.warning(f"Unknown video extension {ext}, defaulting to video/mp4")
 
-    # 检查文件大小 (20MB)
+    # Check file size (20MB)
     file_size = os.path.getsize(video_path)
     final_path = video_path
     is_compressed = False
@@ -72,7 +72,7 @@ def _encode_video_to_base64(video_path: str) -> tuple[str, str]:
         compressed_path = _compress_video(video_path)
         if compressed_path != video_path:
             final_path = compressed_path
-            mime_type = "video/mp4" # ffmpeg 输出总是 mp4
+            mime_type = "video/mp4" # ffmpeg output is always mp4
             is_compressed = True
     
     try:
@@ -80,7 +80,7 @@ def _encode_video_to_base64(video_path: str) -> tuple[str, str]:
             raw = f.read()
         b64 = base64.b64encode(raw).decode("utf-8")
     finally:
-        # 清理临时压缩文件
+        # Clean up temporary compressed file
         if is_compressed and os.path.exists(final_path):
             try:
                 os.remove(final_path)
@@ -121,7 +121,7 @@ async def call_video_understanding_async(
     **kwargs,
 ) -> str:
     """
-    调用视频理解模型
+    Calls video understanding model
     """
     b64, mime_type = _encode_video_to_base64(video_path)
     log.info(f"[Video] Encoded video {video_path}, mime={mime_type}, size={len(b64)/1024/1024:.2f}MB")
@@ -163,7 +163,7 @@ async def call_video_understanding_async(
             ]
         })
 
-    # 3. 使用 Provider 构造请求
+    # 3. Use Provider to construct request
     provider = get_provider(api_url, model)
     url, payload = provider.build_chat_request(
         api_url=api_url,
@@ -174,10 +174,10 @@ async def call_video_understanding_async(
         **kwargs
     )
     
-    # 4. 发送请求
+    # 4. Send request
     data = await _post_raw(url, api_key, payload, timeout)
     
-    # 5. 解析响应
+    # 5. Parse response
     return provider.parse_chat_response(data)
 
 if __name__ == "__main__":
@@ -186,8 +186,8 @@ if __name__ == "__main__":
 
     load_dotenv()
     
-    # 创建一个空的 dummy 视频文件是不容易被 ffmpeg 处理的
-    # 所以视频测试仅当用户提供了有效路径时才尝试，或者尝试查找
+    # Creating an empty dummy video file is not easily handled by ffmpeg
+    # So video test is only attempted when user provides a valid path, or tries to find one
     def find_any_mp4():
         for root, dirs, files in os.walk("."):
             for f in files:
@@ -205,7 +205,7 @@ if __name__ == "__main__":
         print(f"Model: {MODEL}")
         print(f"----------------------------------")
 
-        # 尝试使用环境变量指定视频，否则查找
+        # Try using environment variable specified video, otherwise find
         video_path = os.getenv("TEST_VIDEO_PATH")
         if not video_path:
             video_path = find_any_mp4()

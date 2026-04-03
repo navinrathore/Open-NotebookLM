@@ -14,35 +14,35 @@ Design philosophy:
 - Internally cache heavy model objects to avoid repeated initialization
 - Normalize outputs into Python dict / list structures that are easy to consume
 
-# 函数一览（中文说明）：
-# _ensure_ultralytics_sam_available: 校验 ultralytics.SAM 是否可用，否则抛出安装提示。
-# _ensure_ultralytics_yolo_available: 校验 ultralytics.YOLO 是否可用，否则抛出安装提示。
-# _ensure_hf_pipeline_available: 校验 transformers.pipeline 是否可用，否则抛出安装提示。
-# _ensure_skimage_available: 校验 scikit-image 是否可用，否则抛出安装提示。
-# _ensure_matplotlib_available: 校验 matplotlib 是否可用，否则抛出安装提示。
-# _load_image_pil: 从路径读取图片并转为 RGB 的 PIL.Image。
-# _get_image_size: 返回图片的宽高 (width, height)。
-# _get_sam_model: 懒加载并缓存指定 checkpoint 的 SAM 模型。
-# free_sam_model: 显式释放指定 checkpoint 的 SAM 模型并清理 CUDA 显存。
-# run_sam_auto: 对单张图片运行 SAM 自动分割，返回每个实例的 mask、归一化 bbox 等信息。
-# run_sam_auto_batch: 对多张图片批量运行 SAM 自动分割，按图片返回实例列表。
-# _get_yolo_model: 懒加载并缓存指定权重和设备的 YOLOv8 分割模型。
-# run_yolov8_seg: 对单张图片运行 YOLOv8 实例分割，返回带类别标签和分数的实例信息。
-# run_yolov8_seg_batch: 对多张图片批量运行 YOLOv8 实例分割，按图片返回实例列表。
-# _get_hf_seg_pipeline: 懒加载并缓存 Hugging Face 语义分割 pipeline。
-# run_hf_semantic_seg: 使用 HF pipeline 对单张图片做语义分割，返回每个类别的前景掩膜。
-# run_hf_semantic_seg_batch: 对多张图片批量做语义分割，按图片返回类别掩膜列表。
-# run_felzenszwalb: 调用 Felzenszwalb 图分割算法，返回标签图或每个 segment 的布尔掩膜。
-# save_felzenszwalb_visualization: 运行 Felzenszwalb 并保存带分割边界的可视化图片。
-# save_sam_instances: 将 SAM 分割得到的每个实例按 bbox 或 RGBA mask 截图后保存为单独图片。
-# 过滤/后处理函数：
-# filter_sam_items_by_area_and_score: 按最小面积、最小得分过滤 SAM 实例。
-# bbox_iou: 计算两个归一化 bbox 的 IoU。
-# mask_iou: 计算两个布尔 mask 的 IoU。
-# nms_sam_items_by_bbox: 基于 bbox IoU 的 SAM 实例 NMS 去重。
-# nms_sam_items_by_mask: 基于 mask IoU 的 SAM 实例 NMS 去重。
-# topk_sam_items: 只保留 Top-K 个 SAM 实例。
-# postprocess_sam_items: 统一封装上述步骤的 SAM 实例后处理函数。
+# Function Overview (English description):
+# _ensure_ultralytics_sam_available: Validate if ultralytics.SAM is available, otherwise throw installation prompt.
+# _ensure_ultralytics_yolo_available: Validate if ultralytics.YOLO is available, otherwise throw installation prompt.
+# _ensure_hf_pipeline_available: Validate if transformers.pipeline is available, otherwise throw installation prompt.
+# _ensure_skimage_available: Validate if scikit-image is available, otherwise throw installation prompt.
+# _ensure_matplotlib_available: Validate if matplotlib is available, otherwise throw installation prompt.
+# _load_image_pil: Read image from path and convert to RGB PIL.Image.
+# _get_image_size: Return image dimensions (width, height).
+# _get_sam_model: Lazy-load and cache SAM model for specified checkpoint.
+# free_sam_model: Explicitly release SAM model for specified checkpoint and clean up CUDA memory.
+# run_sam_auto: Run SAM automatic segmentation on a single image, return mask, normalized bbox, etc., for each instance.
+# run_sam_auto_batch: Run SAM automatic segmentation on multiple images batch, return instance list per image.
+# _get_yolo_model: Lazy-load and cache YOLOv8 segmentation model for specified weights and device.
+# run_yolov8_seg: Run YOLOv8 instance segmentation on a single image, return instance info with class labels and scores.
+# run_yolov8_seg_batch: Run YOLOv8 instance segmentation on multiple images batch, return instance list per image.
+# _get_hf_seg_pipeline: Lazy-load and cache Hugging Face semantic segmentation pipeline.
+# run_hf_semantic_seg: Use HF pipeline for semantic segmentation on a single image, return foreground masks per category.
+# run_hf_semantic_seg_batch: Run semantic segmentation on multiple images batch, return category mask list per image.
+# run_felzenszwalb: Call Felzenszwalb graph segmentation algorithm, return label map or boolean mask per segment.
+# save_felzenszwalb_visualization: Run Felzenszwalb and save visualization image with segmentation boundaries.
+# save_sam_instances: Save each instance from SAM segmentation as separate images by bbox or RGBA mask clipping.
+# Filter/Post-processing functions:
+# filter_sam_items_by_area_and_score: Filter SAM instances by minimum area and minimum score.
+# bbox_iou: Calculate IoU of two normalized bboxes.
+# mask_iou: Calculate IoU of two boolean masks.
+# nms_sam_items_by_bbox: NMS deduplication of SAM instances based on bbox IoU.
+# nms_sam_items_by_mask: NMS deduplication of SAM instances based on mask IoU.
+# topk_sam_items: Keep only Top-K SAM instances.
+# postprocess_sam_items: Unified post-processing wrapper for SAM instances encapsulating above steps.
 
 """
 
@@ -82,7 +82,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     plt = None  # type: ignore
 
-# torch 仅用于显式释放 CUDA 显存（free_sam_model 等场景）
+# torch is only used for explicitly releasing CUDA memory (e.g., free_sam_model scenario)
 try:  # pragma: no cover - optional dependency
     import torch
 except Exception:  # pragma: no cover
@@ -172,25 +172,25 @@ def _get_sam_model(
 
 def free_sam_model(checkpoint: str = "sam_b.pt") -> None:
     """
-    显式释放指定 checkpoint 对应的 SAM 模型，并尽量清理 CUDA 显存。
+    Explicitly release the SAM model associated with the specified checkpoint, and try to clean up CUDA memory.
 
-    典型用法：
+    Typical usage:
         from workflow_engine.toolkits.multimodaltool.sam_tool import free_sam_model
 
-        # 在 workflow 正常结束或发生 OOM 后调用
+        # Call after a workflow ends normally or an OOM occurs
         free_sam_model("/abs/path/to/sam_b.pt")
 
-    注意：
-    - 仅影响当前 Python 进程持有的 SAM 模型，不会影响其他 GPU 进程。
-    - 若当前环境中没有安装 torch，则只能删除 Python 层的引用，
-      无法调用 torch.cuda.empty_cache()。
+    Note:
+    - Only affects the SAM model held by the current Python process, does not affect other GPU processes.
+    - If torch is not installed in the current environment, only Python-level references can be deleted,
+      torch.cuda.empty_cache() cannot be called.
     """
     global _SAM_MODELS
     m = _SAM_MODELS.pop(checkpoint, None)
     if m is not None:
-        # 尝试清理 ultralytics 内部引用
+        # Attempt to clean up ultralytics internal references
         try:
-            # 一些 ultralytics 模型提供 model.to("cpu") 等接口，此处最好切到 CPU 再删除
+            # Some ultralytics models provide model.to("cpu") etc., it's best to move to CPU before deleting
             if hasattr(m, "model"):
                 try:
                     m.model.to("cpu")
@@ -201,12 +201,12 @@ def free_sam_model(checkpoint: str = "sam_b.pt") -> None:
 
         del m
 
-    # 若 torch 可用，则尝试清空 CUDA 缓存，减轻显存压力
+    # If torch is available, attempt to clear CUDA cache to reduce memory pressure
     if torch is not None and torch.cuda.is_available():
         try:
             torch.cuda.empty_cache()
         except Exception:
-            # 防御式处理，确保不会因为清理失败影响主流程
+            # Defensive handling to ensure cleanup failure does not affect main process
             pass
 
 
@@ -419,7 +419,7 @@ def run_sam_auto_batch(
 
 
 # -----------------------------------------------------------------------------
-# 1.1 SAM post-processing helpers (过滤 / 去重 / Top-K)
+# 1.1 SAM post-processing helpers (Filter / Deduplicate / Top-K)
 # -----------------------------------------------------------------------------
 def filter_sam_items_by_area_and_score(
     items: List[Dict[str, Any]],
@@ -427,21 +427,21 @@ def filter_sam_items_by_area_and_score(
     min_score: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """
-    简单按面积和得分过滤 SAM 实例。
+    Simple filtering of SAM instances by area and score.
 
     Parameters
     ----------
     items : List[Dict[str, Any]]
-        run_sam_auto 返回的实例列表。
+        Instance list returned by run_sam_auto.
     min_area : int, optional
-        保留的最小像素面积，默认 0（不过滤）。
+        Minimum pixel area to retain, default 0 (no filtering).
     min_score : float, optional
-        保留的最小得分阈值（当存在 score 时），默认 0.0。
+        Minimum score threshold threshold (when score exists), default 0.0.
 
     Returns
     -------
     List[Dict[str, Any]]
-        过滤后的实例列表。
+        Filtered instance list.
     """
     filtered: List[Dict[str, Any]] = []
     for it in items:
@@ -457,7 +457,7 @@ def filter_sam_items_by_area_and_score(
 
 def bbox_iou(box1: Sequence[float], box2: Sequence[float]) -> float:
     """
-    计算两个归一化 bbox 的 IoU。
+    Calculates IoU of two normalized bboxes.
 
     Parameters
     ----------
@@ -466,7 +466,7 @@ def bbox_iou(box1: Sequence[float], box2: Sequence[float]) -> float:
     Returns
     -------
     float
-        IoU 值，范围 [0, 1]。
+        IoU value, range [0, 1].
     """
     if len(box1) != 4 or len(box2) != 4:
         return 0.0
@@ -496,10 +496,10 @@ def bbox_iou(box1: Sequence[float], box2: Sequence[float]) -> float:
 
 def mask_iou(m1: np.ndarray, m2: np.ndarray) -> float:
     """
-    计算两个布尔 mask 的 IoU。
+    Calculates IoU of two boolean masks.
     """
     if m1.shape != m2.shape:
-        # 简单兜底：形状不一致时不计算 IoU
+        # Simple fallback: do not calculate IoU if shapes are inconsistent
         return 0.0
 
     m1_bool = m1.astype(bool)
@@ -520,24 +520,24 @@ def nms_sam_items_by_bbox(
     score_key: str = "score",  # "score" | "area"
 ) -> List[Dict[str, Any]]:
     """
-    基于 bbox IoU 的 Non-Maximum Suppression（NMS）去重。
+    Non-Maximum Suppression (NMS) deduplication based on bbox IoU.
 
-    - 按 score_key（score 或 area）从大到小排序；
-    - 依次保留与已有保留框 IoU 小于阈值的实例。
+    - Sort by score_key (score or area) in descending order;
+    - Sequentially retain instances with bbox IoU less than threshold with already retained ones.
 
     Parameters
     ----------
     items : List[Dict[str, Any]]
-        run_sam_auto 返回的实例列表。
+        Instance list returned by run_sam_auto.
     iou_threshold : float, optional
-        IoU 阈值，超过则认为“太重叠”，默认 0.5。
+        IoU threshold, considered "too much overlap" if exceeded, default 0.5.
     score_key : str, optional
-        用于排序和优先保留的字段，默认 "score"，可选 "area"。
+        Field used for sorting and priority retention, default "score", optionally "area".
 
     Returns
     -------
     List[Dict[str, Any]]
-        经过 NMS 去重后的实例列表。
+        Instance list after NMS deduplication.
     """
 
     def _score(it: Dict[str, Any]) -> float:
@@ -551,7 +551,7 @@ def nms_sam_items_by_bbox(
         # fallback to area
         return float(it.get("area", 0))
 
-    # 从高分/大面积到低分/小面积排序
+    # Sort from high score/large area to low score/small area
     items_sorted = sorted(items, key=_score, reverse=True)
 
     kept: List[Dict[str, Any]] = []
@@ -581,24 +581,24 @@ def nms_sam_items_by_mask(
     score_key: str = "score",
 ) -> List[Dict[str, Any]]:
     """
-    基于 mask IoU 的 Non-Maximum Suppression（NMS）去重。
+    Non-Maximum Suppression (NMS) deduplication based on mask IoU.
 
-    - IoU 计算使用像素级 mask，更精确但速度稍慢；
-    - 其他逻辑与 nms_sam_items_by_bbox 类似。
+    - IoU calculation uses pixel-level mask, more precise but slightly slower;
+    - Other logic similar to nms_sam_items_by_bbox.
 
     Parameters
     ----------
     items : List[Dict[str, Any]]
-        run_sam_auto 返回的实例列表。
+        Instance list returned by run_sam_auto.
     iou_threshold : float, optional
-        IoU 阈值，默认 0.5。
+        IoU threshold, default 0.5.
     score_key : str, optional
-        用于排序的字段，默认 "score"，可选 "area"。
+        Field used for sorting, default "score", optionally "area".
 
     Returns
     -------
     List[Dict[str, Any]]
-        经过 NMS 去重后的实例列表。
+        Instance list after NMS deduplication.
     """
 
     def _score(it: Dict[str, Any]) -> float:
@@ -631,7 +631,7 @@ def nms_sam_items_by_mask(
             if m2_arr.dtype != bool:
                 m2_arr = m2_arr > 0
 
-            # 形状不同则视作 IoU=0（不去重）
+            # Treat as IoU=0 (no deduplication) if shapes are different
             if m_arr.shape != m2_arr.shape:
                 continue
 
@@ -651,21 +651,21 @@ def topk_sam_items(
     sort_key: str = "area",  # "area" | "score"
 ) -> List[Dict[str, Any]]:
     """
-    只保留 Top-K 个 SAM 实例。
+    Keep only Top-K SAM instances.
 
     Parameters
     ----------
     items : List[Dict[str, Any]]
-        run_sam_auto 返回的实例列表。
+        Instance list returned by run_sam_auto.
     k : int, optional
-        要保留的实例数量；小于等于 0 时不截断，默认 0。
+        Number of instances to retain; do not truncate if less than or equal to 0, default 0.
     sort_key : str, optional
-        排序依据，默认 "area"，可选 "score"。
+        Sorting criteria, default "area", optionally "score".
 
     Returns
     -------
     List[Dict[str, Any]]
-        截断后的实例列表。
+        Truncated instance list.
     """
     if k is None or k <= 0:
         return items
@@ -695,9 +695,9 @@ def postprocess_sam_items(
     sort_key_for_topk: str = "area",  # "area" | "score"
 ) -> List[Dict[str, Any]]:
     """
-    统一封装 SAM 实例的后处理流程（过滤 + NMS + Top-K）。
+    Unified wrapper for SAM instance post-processing flow (Filter + NMS + Top-K).
 
-    典型用法：
+    Typical usage:
         items = run_sam_auto(...)
         items = postprocess_sam_items(
             items,
@@ -711,35 +711,35 @@ def postprocess_sam_items(
     Parameters
     ----------
     items : List[Dict[str, Any]]
-        run_sam_auto 返回的实例列表。
+        Instance list returned by run_sam_auto.
     min_area : int, optional
-        最小保留面积，默认 0（不过滤）。
+        Minimum area to retain, default 0 (no filtering).
     min_score : float, optional
-        最小保留得分（当存在 score），默认 0.0。
+        Minimum score threshold to retain (when score exists), default 0.0.
     iou_threshold : float, optional
-        若大于 0，则按该阈值进行 NMS 去重；小于等于 0 时不做 NMS。
+        If greater than 0, perform NMS deduplication with this threshold; no NMS if less than or equal to 0.
     top_k : Optional[int], optional
-        若给定且 > 0，则在 NMS 后只保留 Top-K，默认 None（不截断）。
+        If given and > 0, retain only Top-K after NMS, default None (no truncation).
     nms_by : {"bbox", "mask"}, optional
-        NMS 的 IoU 计算方式，默认 "bbox"。
+        IoU calculation method for NMS, default "bbox".
     score_key_for_nms : {"score", "area"}, optional
-        NMS 时的排序依据，默认 "score"。
+        Sorting criteria during NMS, default "score".
     sort_key_for_topk : {"area", "score"}, optional
-        Top-K 时的排序依据，默认 "area"。
+        Sorting criteria for Top-K, default "area".
 
     Returns
     -------
     List[Dict[str, Any]]
-        经过后处理的 SAM 实例列表。
+        Post-processed SAM instance list.
     """
-    # 1) 面积 / 得分过滤
+    # 1) Area / Score filtering
     out = filter_sam_items_by_area_and_score(
         items,
         min_area=min_area,
         min_score=min_score,
     )
 
-    # 2) NMS 去重
+    # 2) NMS deduplication
     if iou_threshold and iou_threshold > 0.0:
         if nms_by == "mask":
             out = nms_sam_items_by_mask(
@@ -754,7 +754,7 @@ def postprocess_sam_items(
                 score_key=score_key_for_nms,
             )
 
-    # 3) Top-K 截断
+    # 3) Top-K truncation
     if top_k is not None and top_k > 0:
         out = topk_sam_items(
             out,
@@ -1187,17 +1187,17 @@ def segment_layout_boxes(
     nms_by: str = "bbox",
 ) -> List[Dict[str, Any]]:
     """
-    针对空框模板图做 SAM 分割，过滤 + NMS + 裁剪，返回每个框的 bbox + patch PNG 路径。
+    Perform SAM segmentation on empty box template images, including filtering + NMS + cropping, returning bbox + patch PNG path for each box.
 
-    该函数主要服务于 paper2figure_with_sam 工作流中的“背景框架层”生成：
-    - 输入为二次编辑后的空框模板图（fig_layout_path）；
-    - 不关心具体语义，只需要稳定的矩形/箭头布局；
-    - 输出 items 将在后续被转换为 SVG / EMF 并按 bbox 映射回 PPT。
+    This function primarily serves the "background frame layer" generation in the paper2figure_with_sam workflow:
+    - Input is the edited empty box template image (fig_layout_path);
+    - Does not care about specific semantics, only stable rectangle/arrow layout is needed;
+    - Output items will later be converted to SVG / EMF and mapped back to PPT by bbox.
     """
-    # 1) SAM 自动分割
+    # 1) SAM automatic segmentation
     items = run_sam_auto(image_path, checkpoint=checkpoint, device=device)
 
-    # 2) 过滤 + NMS + Top-K
+    # 2) Filtering + NMS + Top-K
     items = postprocess_sam_items(
         items,
         min_area=min_area,
@@ -1209,7 +1209,7 @@ def segment_layout_boxes(
         sort_key_for_topk="area",
     )
 
-    # 3) 将每个实例按 bbox 裁剪为 PNG 小图
+    # 3) Crop each instance as small PNG image based on bbox
     saved_paths = save_sam_instances(
         image_path=image_path,
         items=items,
@@ -1218,12 +1218,12 @@ def segment_layout_boxes(
         mode="bbox",
     )
 
-    # 4) 绑定 png_path & type
+    # 4) Bind png_path & type
     for i, p in enumerate(saved_paths):
         if i >= len(items):
             break
         items[i]["png_path"] = p
-        # 标记为布局框，和 MinerU 的 type 区分开
+        # Mark as layout box, distinct from MinerU type
         items[i]["type"] = "layout_box"
 
     return items
@@ -1244,7 +1244,7 @@ def segment_layout_boxes_server(
     """
     Server version of segment_layout_boxes.
     """
-    # 1) SAM 自动分割 (Remote)
+    # 1) SAM automatic segmentation (Remote)
     items = run_sam_auto_server(
         image_path, 
         server_urls=server_urls, 

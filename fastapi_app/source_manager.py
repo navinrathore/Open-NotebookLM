@@ -91,7 +91,7 @@ class SourceManager:
 
     async def import_text(self, content: str, title: str) -> SourceInfo:
         """Import plain text as a .md source."""
-        safe = re.sub(r'[^\w\u4e00-\u9fff\s\-.]', "", (title or "").strip())
+        safe = re.sub(r'[^\w\s\-.]', "", (title or "").strip())
         safe = (safe or "text")[:80].strip() or "text"
         filename = f"{safe}_{int(time.time())}.md"
         stem = Path(filename).stem
@@ -119,7 +119,7 @@ class SourceManager:
             from urllib.parse import urlparse
             parsed = urlparse(url)
             title = (parsed.netloc or "web") + "_" + (parsed.path.strip("/") or "page")[:30]
-        safe = re.sub(r'[^\w\u4e00-\u9fff\s\-.]', "", title)
+        safe = re.sub(r'[^\w\s\-.]', "", title)
         safe = (safe or "url")[:80].strip() or "url"
         filename = f"{safe}_{int(time.time())}.md"
         stem = Path(filename).stem

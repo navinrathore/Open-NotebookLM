@@ -9,13 +9,16 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8213',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/outputs': {
-        target: 'http://localhost:8213',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },
+  },
+  build: {
+    sourcemap: true,  // generates .map files alongside the .js files
   },
 })

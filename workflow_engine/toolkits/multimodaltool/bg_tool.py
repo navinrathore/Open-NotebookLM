@@ -33,7 +33,7 @@ CURRENT_DIR = Path(__file__).resolve().parent
 MODEL_PATH = CURRENT_DIR / "onnx" / "model.onnx"
 OUTPUT_DIR = CURRENT_DIR
 
-# 进程级抠图模型缓存：按 model_path 复用 BriaRMBG2Remover 实例
+# Process-level background removal model cache: reuse BriaRMBG2Remover instances by model_path
 _BG_RMBG_MODEL_CACHE: dict[str, "BriaRMBG2Remover"] = {}
 
 
@@ -55,18 +55,18 @@ def ensure_model(model_path: Path) -> None:
         当下载结束后仍未在 ``model_path`` 处找到模型文件时抛出。
     """
     if model_path.exists():
-        print(f"模型已存在: {model_path}")
+        print(f"Model already exists: {model_path}")
         return
 
-    print("未检测到模型文件，正在下载 RMBG-2.0 权重...")
+    print("Model file not detected, downloading RMBG-2.0 weights...")
 
-    # 确保目录存在
+    # Ensure directory exists
     model_path.parent.mkdir(parents=True, exist_ok=True)
-    # 判断当前系统是否为Windows
+    # Check if current system is Windows
     is_windows = platform.system().lower() == "windows"
-    # Windows用双引号包裹路径，Linux/macOS用单引号（保持原有逻辑）
+    # Use double quotes for paths on Windows, single quotes on Linux/macOS (keep original logic)
     quote = '"' if is_windows else "'"
-    # 直接下载到目标目录
+    # Download directly to target directory
     cmd = (
         f"modelscope download "
         f"--model AI-ModelScope/RMBG-2.0 "
@@ -147,7 +147,7 @@ class BriaRMBG2Remover:
             输出抠图结果 PNG 文件的绝对路径。
         """
         image_path = Path(image_path)
-        print(f"开始抠图: {image_path}")
+        print(f"Starting background removal: {image_path}")
 
         # Load image
         image = Image.open(image_path).convert("RGB")
@@ -176,14 +176,14 @@ class BriaRMBG2Remover:
 
     def remove_background_batch(self, image_paths: list[str]) -> list[str]:
         """
-        批量背景去除（一次加载模型，逐张处理）
-        返回输出文件路径列表
+        Batch background removal (load model once, process one by one)
+        Returns list of output file paths
         """
         results = []
 
         for image_path in image_paths:
             image_path = Path(image_path)
-            print(f"[Batch] 开始抠图: {image_path}")
+            print(f"[Batch] Starting background removal: {image_path}")
 
             # Load image
             image = Image.open(image_path).convert("RGB")
@@ -214,7 +214,7 @@ class BriaRMBG2Remover:
 
 
 # class BriaRMBG2Remover:
-#     """使用 BRIA-RMBG 2.0 模型进行高质量抠图"""
+#     """High-quality background removal using BRIA-RMBG 2.0 model"""
 #
 #     def __init__(self, model_path: str | None = None, output_dir: str | None = None):
 #         self.model_path = Path(model_path) if model_path else MODEL_PATH
@@ -222,7 +222,7 @@ class BriaRMBG2Remover:
 #
 #         ensure_model(self.model_path)
 #
-#         # 优先使用 GPU，否则退回 CPU
+#         # Prefer GPU, fallback to CPU
 #         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
 #         self.session = ort.InferenceSession(str(self.model_path), providers=providers)
 #
@@ -248,7 +248,7 @@ class BriaRMBG2Remover:
 #
 #         out_path = self.output_dir / f"{Path(image_path).stem}_bg_removed.png"
 #         out.save(out_path)
-#         print(f"抠图完成: {out_path}")
+#         print(f"Background removal complete: {out_path}")
 #         return str(out_path)
 
 
@@ -293,7 +293,7 @@ def free_bg_rm_model(model_path: str | None = None) -> None:
         try:
             if hasattr(m, "model"):
                 try:
-                    # 先把模型迁移到 CPU，再删除引用
+                    # Migration model to CPU first, then delete reference
                     m.model.to("cpu")
                 except Exception:
                     pass
@@ -341,7 +341,7 @@ def local_tool_for_bg_remove(req: dict) -> str:
 
 
 def local_tool_for_bg_remove_batch(req: dict) -> list[str]:
-    """使用进程级单例模型进行批量抠图"""
+    """Batch background removal using process-level singleton model"""
     remover = get_bg_rm_remover(
         model_path=req.get("model_path"), output_dir=req.get("output_dir")
     )
@@ -363,13 +363,13 @@ def get_bg_remove_desc(lang: str = "zh") -> str:
         工具功能说明。
     """
     return (
-        "使用 BRIA-RMBG 2.0 模型执行高质量抠图，自动去除背景并输出带透明通道的 PNG 文件。"
-        "支持多种输入格式（JPG/PNG/WebP），输出文件默认保存在同目录的 bg_removed/ 下。"
+        "Performs high-quality background removal using BRIA-RMBG 2.0 model, automatically removing backgrounds and outputting PNG files with alpha channel. "
+        "Supports multiple input formats (JPG/PNG/WebP), output files are saved in the bg_removed/ directory of the input image by default."
     )
 
 
 # ======================================================================
-# vtracer：位图 → SVG 矢量化
+# vtracer: Raster -> SVG vectorization
 # ======================================================================
 
 
@@ -394,40 +394,40 @@ def convert_image_to_svg(
     本函数是对 ``vtracer.convert_image_to_svg_py`` 的轻量封装，
     主要用于在 DataFlow-Agent 的工具体系中提供统一的位图→SVG 能力。
 
-    参数
+    Parameters
     ----
     input_path:
-        输入图片路径（支持 PNG/JPEG 等常见格式）。
+        Input image path (supports common formats like PNG/JPEG).
     output_path:
-        输出 SVG 文件路径。
+        Output SVG file path.
     colormode:
-        颜色模式：
-        - "color": 彩色矢量化。
-        - "binary": 黑白矢量化（默认）。
+        Color mode:
+        - "color": Color vectorization.
+        - "binary": Black and white vectorization (default).
     hierarchical:
-        分层模式：
-        - "stacked": 堆叠扫描（推荐，默认）。
-        - "cutout": 镂空效果。
+        Hierarchy mode:
+        - "stacked": Stacked scan (recommended, default).
+        - "cutout": Cutout effect.
     mode:
-        路径模式：
-        - "spline": 使用平滑曲线拟合路径（默认）。
-        - "polygon": 使用多边形近似路径。
+        Path mode:
+        - "spline": Fit paths using smooth curves (default).
+        - "polygon": Approximate paths using polygons.
     filter_speckle:
-        噪点过滤阈值（像素面积小于该值的区域会被移除）。
+        Speckle filtering threshold (regions with pixel area smaller than this value are removed).
     color_precision:
-        颜色精度，数值越小，合并的颜色越多，颜色数量越少。
+        Color precision, the smaller the value, the more colors are merged, fewer colors in output.
     layer_difference:
-        层级差异参数，用于控制相邻层的分割敏感度。
+        Layer difference parameter, used to control split sensitivity of adjacent layers.
     corner_threshold:
-        角点阈值，决定将拐弯点视为角点的严格程度（角度阈值）。
+        Corner threshold, determines strictness of treating corner points as corners (angle threshold).
     length_threshold:
-        长度阈值，用于过滤非常短的线段。
+        Length threshold, used to filter very short segments.
     max_iterations:
-        曲线拟合的最大迭代次数。
+        Maximum iterations for curve fitting.
     splice_threshold:
-        路径拼接阈值，用于合并相近的路径段。
+        Path splice threshold, used to merge close path segments.
     path_precision:
-        路径精度，控制输出曲线/多边形的精细程度。
+        Path precision, controls fineness of output curves/polygons.
 
     返回
     ----
@@ -445,7 +445,7 @@ def convert_image_to_svg(
 
     input_p = Path(input_path)
     if not input_p.exists():
-        raise FileNotFoundError(f"输入文件不存在: {input_p}")
+        raise FileNotFoundError(f"Input file not found: {input_p}")
 
     output_p = Path(output_path)
     output_p.parent.mkdir(parents=True, exist_ok=True)
@@ -472,7 +472,7 @@ def convert_image_to_svg(
             path_precision=path_precision,
         )
     except Exception as e:
-        raise RuntimeError(f"vtracer 转换失败: {e}") from e
+        raise RuntimeError(f"vtracer conversion failed: {e}") from e
 
     return str(output_p.resolve())
 
@@ -511,9 +511,9 @@ def local_tool_for_raster_to_svg(req: dict) -> str:
         生成的 SVG 文件的绝对路径。
     """
     if "image_path" not in req:
-        raise ValueError("缺少必需字段: image_path")
+        raise ValueError("Missing required field: image_path")
     if "output_svg" not in req:
-        raise ValueError("缺少必需字段: output_svg")
+        raise ValueError("Missing required field: output_svg")
 
     return convert_image_to_svg(
         input_path=req["image_path"],
@@ -562,7 +562,7 @@ def get_raster_to_svg_desc(lang: str = "zh") -> str:
 
 
 # ======================================================================
-# CairoSVG：SVG → PNG/PDF/PS 等渲染
+# CairoSVG: SVG -> PNG/PDF/PS rendering
 # ======================================================================
 
 
@@ -621,7 +621,7 @@ def render_svg_to_image(
         import cairosvg
     except ModuleNotFoundError as e:
         raise RuntimeError(
-            "cairosvg 未安装，请先运行 `pip install cairosvg`"
+            "cairosvg not installed, please run `pip install cairosvg` first"
         ) from e
 
     out_p = Path(output_path)
@@ -633,7 +633,7 @@ def render_svg_to_image(
 
     try:
         if from_string:
-            # svg_source 是 SVG 字符串
+            # svg_source is SVG string
             data = svg_source.encode("utf-8")
             if fmt == "png":
                 cairosvg.svg2png(bytestring=data, write_to=str(out_p), scale=scale)
@@ -642,15 +642,15 @@ def render_svg_to_image(
             elif fmt == "ps":
                 cairosvg.svg2ps(bytestring=data, write_to=str(out_p))
             elif fmt == "svg":
-                # 直接写入文件
+                # Write to file directly
                 out_p.write_text(svg_source, encoding="utf-8")
             else:
-                raise ValueError(f"不支持的输出格式: {fmt}")
+                raise ValueError(f"Unsupported output format: {fmt}")
         else:
-            # svg_source 是 SVG 文件路径
+            # svg_source is SVG file path
             in_p = Path(svg_source)
             if not in_p.exists():
-                raise FileNotFoundError(f"输入 SVG 文件不存在: {in_p}")
+                raise FileNotFoundError(f"Input SVG file not found: {in_p}")
 
             if fmt == "png":
                 cairosvg.svg2png(url=str(in_p), write_to=str(out_p), scale=scale)
@@ -659,12 +659,12 @@ def render_svg_to_image(
             elif fmt == "ps":
                 cairosvg.svg2ps(url=str(in_p), write_to=str(out_p))
             elif fmt == "svg":
-                # 复制原始 SVG
+                # Copy original SVG
                 out_p.write_text(in_p.read_text(encoding="utf-8"), encoding="utf-8")
             else:
-                raise ValueError(f"不支持的输出格式: {fmt}")
+                raise ValueError(f"Unsupported output format: {fmt}")
     except Exception as e:
-        raise RuntimeError(f"SVG 渲染失败: {e}") from e
+        raise RuntimeError(f"SVG rendering failed: {e}") from e
 
     return str(out_p.resolve())
 
@@ -776,7 +776,7 @@ def get_svg_render_desc(lang: str = "zh") -> str:
 
 
 # ======================================================================
-# Inkscape：SVG → EMF 矢量转换
+# Inkscape: SVG -> EMF vector conversion
 # ======================================================================
 
 
@@ -802,16 +802,16 @@ def svg_to_emf(svg_path: str, emf_path: str, dpi: int = 600) -> str:
     str
         生成的 EMF 文件的绝对路径。
 
-    异常
-    ----
+    Exceptions
+    -------
     FileNotFoundError
-        当输入 SVG 文件不存在时。
+        When input SVG file does not exist.
     RuntimeError
-        当 Inkscape 调用失败或未生成输出文件时。
+        When Inkscape call fails or output file is not generated.
     """
     svg_p = Path(svg_path)
     if not svg_p.exists():
-        raise FileNotFoundError(f"输入 SVG 不存在: {svg_p}")
+        raise FileNotFoundError(f"Input SVG does not exist: {svg_p}")
 
     emf_p = Path(emf_path)
     emf_p.parent.mkdir(parents=True, exist_ok=True)
@@ -833,47 +833,47 @@ def svg_to_emf(svg_path: str, emf_path: str, dpi: int = 600) -> str:
         )
     except FileNotFoundError as e:
         raise RuntimeError(
-            "调用 Inkscape 失败：系统中可能未安装 `inkscape` 可执行文件，"
-            "请先安装 Inkscape 并确保其在 PATH 中。"
+            "Calling Inkscape failed: `inkscape` executable might not be installed in the system, "
+            "please install Inkscape first and ensure it is in the PATH."
         ) from e
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"Inkscape 转换失败，返回码 {result.returncode}：\n"
+            f"Inkscape conversion failed, return code {result.returncode}:\n"
             f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
         )
 
     if not emf_p.exists():
-        raise RuntimeError(f"Inkscape 运行后未发现输出 EMF 文件: {emf_p}")
+        raise RuntimeError(f"Output EMF file not found after Inkscape run: {emf_p}")
 
     return str(emf_p.resolve())
 
 
 def local_tool_for_svg_to_emf(req: dict) -> str:
     """
-    将 SVG 文件转换为 EMF 矢量图的统一接口。
+    Unified interface for converting SVG files to EMF vector images.
 
-    必需字段
+    Required Fields
     --------
     - ``svg_path``: str
-        输入 SVG 文件路径。
+        Input SVG file path.
     - ``emf_path``: str
-        输出 EMF 文件路径。
+        Output EMF file path.
 
-    可选字段
+    Optional Fields
     --------
     - ``dpi``: int
-        导出 DPI，默认 600。
+        Export DPI, default 600.
 
-    返回
-    ----
+    Returns
+    -------
     str
-        生成的 EMF 文件的绝对路径。
+        Absolute path of generated EMF file.
     """
     if "svg_path" not in req:
-        raise ValueError("缺少必需字段: svg_path")
+        raise ValueError("Missing required field: svg_path")
     if "emf_path" not in req:
-        raise ValueError("缺少必需字段: emf_path")
+        raise ValueError("Missing required field: emf_path")
 
     return svg_to_emf(
         svg_path=req["svg_path"],
@@ -884,19 +884,19 @@ def local_tool_for_svg_to_emf(req: dict) -> str:
 
 def get_svg_to_emf_desc(lang: str = "zh") -> str:
     """
-    获取 SVG 转 EMF 工具的文本说明。
+    Get text description for the SVG-to-EMF tool.
 
-    参数
-    ----
+    Parameters
+    ----------
     lang:
-        语言代码，目前支持:
-        - "zh": 返回中文描述。
-        - 其它值: 返回英文描述。
+        Language code, currently supported:
+        - "zh": Returns Chinese description.
+        - Other: Returns English description.
 
-    返回
-    ----
+    Returns
+    -------
     str
-        工具功能说明字符串。
+        Tool functionality description.
     """
     if lang == "zh":
         return (
@@ -914,10 +914,10 @@ def get_svg_to_emf_desc(lang: str = "zh") -> str:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="BRIA-RMBG 2.0 高质量抠图与矢量化/渲染工具合集")
-    parser.add_argument("image_path", help="输入图片路径（用于背景抠图示例）")
-    parser.add_argument("--model_path", default=None, help="模型路径（可选）")
-    parser.add_argument("--output_dir", default=None, help="输出目录（可选）")
+    parser = argparse.ArgumentParser(description="BRIA-RMBG 2.0 High-quality Background Removal, Vectorization, and Rendering Toolset")
+    parser.add_argument("image_path", help="Input image path (for background removal example)")
+    parser.add_argument("--model_path", default=None, help="Model path (optional)")
+    parser.add_argument("--output_dir", default=None, help="Output directory (optional)")
     args = parser.parse_args()
 
     out = local_tool_for_bg_remove(

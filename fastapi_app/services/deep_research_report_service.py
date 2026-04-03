@@ -1,6 +1,6 @@
 """
-Deep Research 报告：先用 search 拿到结果，再塞给 LLM 生成长报告。
-LLM 需在首行输出标题，用于来源命名（前缀 [report] 由调用方加）。
+Deep Research Report: Get search results first, then pass to LLM to generate a long report.
+LLM must output the title on the first line, used for naming the source (caller adds [report] prefix).
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ Please write a detailed research report. The first line must be: Title: <short t
 
 
 def _parse_title_and_content(raw: str, topic: str) -> Tuple[str, str]:
-    """从 LLM 输出解析首行 Title: xxx 与正文；若无则用 topic 作为标题。"""
+    """Parse the first line 'Title: xxx' and the body from LLM output; use 'topic' as title if missing."""
     raw = (raw or "").strip()
     if not raw:
         return (topic[:40] or "Deep Research Report", "")
@@ -54,11 +54,11 @@ def generate_report_from_search(
     api_url: str,
     api_key: str,
     model: str = "deepseek-v3.2",
-    language: str = "zh",
+    language: str = "en",
 ) -> Tuple[str, str]:
     """
-    根据 topic 和 search_context 调用 LLM 生成一篇长报告。
-    返回 (报告标题, 报告正文)；标题用于来源命名（调用方加 [report] 前缀）。
+    Call LLM to generate a long research report based on topic and search_context.
+    Returns (report_title, report_body); title used for naming the source (caller adds [report] prefix).
     """
     url = api_url.rstrip("/")
     if not url.endswith("/chat/completions"):
@@ -66,7 +66,7 @@ def generate_report_from_search(
     user_content = USER_PROMPT_TEMPLATE.format(
         topic=topic,
         language=language,
-        search_context=search_context or "(无搜索结果，请基于主题发挥)",
+        search_context=search_context or "(No search results, please improvise based on the topic)",
     )
     payload = {
         "model": model,
@@ -78,7 +78,7 @@ def generate_report_from_search(
         "max_tokens": 16000,
     }
     log.info(
-        "[deep_research_report] LLM 输入: model=%s, url=%s, topic=%r, search_context_len=%s, user_content_preview=%s",
+        "[deep_research_report] LLM Input: model=%s, url=%s, topic=%r, search_context_len=%s, user_content_preview=%s",
         model,
         url,
         topic[:100],
@@ -104,7 +104,7 @@ def generate_report_from_search(
     raw = raw.strip()
     title, content = _parse_title_and_content(raw, topic)
     log.info(
-        "[deep_research_report] LLM 输出: title=%r, report_len=%s, preview=%s",
+        "[deep_research_report] LLM Output: title=%r, report_len=%s, preview=%s",
         title,
         len(content),
         (content[:400] + "..." if len(content) > 400 else content),

@@ -2,7 +2,7 @@
 JWT Authentication dependency for FastAPI.
 
 Validates Supabase JWT tokens and extracts user information.
-Supabase 导入可选：若因 pydantic/realtime 版本不兼容导致导入失败，应用仍可启动，仅无 Supabase 能力。
+Optional Supabase import: If import fails due to pydantic/realtime version incompatibility, the app can still start, but without Supabase capabilities.
 """
 import os
 from typing import Any, Optional
@@ -14,9 +14,9 @@ log = get_logger(__name__)
 
 try:
     from supabase import create_client, Client
-    log.info("Supabase 库导入成功")
+    log.info("Supabase library imported successfully")
 except Exception as e:
-    log.warning(f"Supabase 库导入失败: {e}")
+    log.warning(f"Supabase library import failed: {e}")
     create_client = None  # type: ignore[misc, assignment]
     Client = Any  # type: ignore[misc, assignment]
 
@@ -27,7 +27,7 @@ _supabase_admin_client: Optional[Any] = None
 
 
 def get_supabase_client() -> Optional[Any]:
-    """Get or create Supabase client. Returns None if not configured or supabase 未成功导入."""
+    """Get or create Supabase client. Returns None if not configured or Supabase import failed."""
     global _supabase_client
 
     if create_client is None:

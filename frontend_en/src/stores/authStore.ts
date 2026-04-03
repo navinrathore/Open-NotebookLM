@@ -61,7 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signInWithEmail: async (email, password) => {
     if (!isAuthConfigured()) {
-      set({ error: "认证未配置", loading: false });
+      set({ error: "Authentication not configured", loading: false });
       return;
     }
 
@@ -70,7 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const result = await signIn(email.trim(), password);
 
       if (!result.success) {
-        set({ error: result.message || "登录失败", loading: false });
+        set({ error: result.message || "Login failed", loading: false });
         return;
       }
 
@@ -83,13 +83,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         needsOtpVerification: false,
       });
     } catch (error: any) {
-      set({ error: error.message || "登录失败", loading: false });
+      set({ error: error.message || "Login failed", loading: false });
     }
   },
 
   signUpWithEmail: async (email, password) => {
     if (!isAuthConfigured()) {
-      set({ error: "认证未配置", loading: false });
+      set({ error: "Authentication not configured", loading: false });
       return { needsVerification: false };
     }
 
@@ -98,7 +98,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const result = await signUp(email.trim(), password);
 
       if (!result.success) {
-        set({ error: result.message || "注册失败", loading: false });
+        set({ error: result.message || "Signup failed", loading: false });
         return { needsVerification: false };
       }
 
@@ -122,7 +122,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
       return { needsVerification: false };
     } catch (error: any) {
-      set({ error: error.message || "注册失败", loading: false });
+      set({ error: error.message || "Signup failed", loading: false });
       return { needsVerification: false };
     }
   },

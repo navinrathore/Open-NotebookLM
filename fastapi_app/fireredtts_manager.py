@@ -1,6 +1,6 @@
 """
 FireRedTTS2 Manager
-懒加载 + 自动卸载
+Lazy loading + Auto-unload
 """
 import os
 import time
@@ -19,7 +19,7 @@ _unload_timer = None
 
 
 def _pick_device():
-    """选择最优GPU"""
+    """Pick the best GPU available"""
     if not torch.cuda.is_available():
         return "cpu"
 
@@ -50,7 +50,7 @@ def _pick_device():
 
 
 def _schedule_unload():
-    """调度自动卸载"""
+    """Schedule automatic unloading"""
     global _unload_timer
     if _unload_timer is not None:
         _unload_timer.cancel()
@@ -59,7 +59,7 @@ def _schedule_unload():
         global _model, _device, _last_used
         with _lock:
             if _last_used and (time.time() - _last_used >= IDLE_TIMEOUT):
-                print(f"[TTS] 空闲 {IDLE_TIMEOUT}s，卸载模型")
+                print(f"[TTS] Idle for {IDLE_TIMEOUT}s, unloading model")
                 _model = None
                 _device = None
                 _last_used = None
@@ -72,7 +72,7 @@ def _schedule_unload():
 
 
 def _load_model():
-    """懒加载模型"""
+    """Lazy load the model"""
     global _model, _device, _model_path, _last_used
 
     if _model is not None:
@@ -80,14 +80,14 @@ def _load_model():
         _schedule_unload()
         return _model, _device, _model_path
 
-    print(f"[TTS] 加载 FireRedTTS2 模型: {REPO_ID}")
+    print(f"[TTS] Loading FireRedTTS2 model: {REPO_ID}")
 
     try:
         from fireredtts2.fireredtts2 import FireRedTTS2
     except ImportError as e:
-        raise RuntimeError(f"fireredtts2 未安装: {e}\n运行: pip install fireredtts2")
+        raise RuntimeError(f"fireredtts2 not installed: {e}\nRun: pip install fireredtts2")
 
-    # 下载模型到 HuggingFace 缓存
+    # Download model to HuggingFace cache
     try:
         from huggingface_hub import snapshot_download
         _model_path = snapshot_download(
@@ -95,13 +95,13 @@ def _load_model():
             resume_download=True,
             local_files_only=False
         )
-        print(f"[TTS] 模型已下载到: {_model_path}")
+        print(f"[TTS] Model downloaded to: {_model_path}")
     except Exception as e:
-        print(f"[TTS] 模型下载失败: {e}")
+        print(f"[TTS] Model download failed: {e}")
         raise
 
     _device = _pick_device()
-    print(f"[TTS] 使用设备: {_device}")
+    print(f"[TTS] Using device: {_device}")
 
     try:
         _model = FireRedTTS2(
@@ -110,44 +110,44 @@ def _load_model():
             device=_device,
         )
     except Exception as e:
-        print(f"[TTS] 加载失败: {e}")
+        print(f"[TTS] Load failed: {e}")
         raise
 
     _last_used = time.time()
     _schedule_unload()
-    print(f"[TTS] 模型加载完成")
+    print(f"[TTS] Model load complete")
 
     return _model, _device, _model_path
 
 
 def generate_speech(text: str, voice_name: str = "S1", temperature: float = 0.9) -> bytes:
     """
-    生成语音，返回 WAV 音频字节
+    Generate speech, return WAV audio bytes
 
     Args:
-        text: 文本内容，必须包含说话人标签格式 "[S1]text\n[S2]text"
-        voice_name: 未使用（保留参数兼容性）
-        temperature: 生成温度
+        text: Text content, must contain speaker tag format "[S1]text\n[S2]text"
+        voice_name: Not used (kept for parameter compatibility)
+        temperature: Generation temperature
 
     Returns:
-        WAV 格式音频字节 (24kHz, 16-bit, mono)
+        WAV format audio bytes (24kHz, 16-bit, mono)
     """
     with _lock:
         model, device, model_path = _load_model()
 
-    # 解析文本为对话列表，并分割过长的行
+    # Parse text into dialogue list, and split long lines
     text_list = []
-    max_line_len = 200  # 每行最多200字符
+    max_line_len = 200  # Max 200 chars per line
     for line in text.strip().split("\n"):
         line = line.strip()
         if line and (line.startswith("[S1]") or line.startswith("[S2]")):
             speaker = line[:4]  # [S1] or [S2]
             content = line[4:].strip()
-            # 分割过长内容
+            # Split overly long content
             if len(content) <= max_line_len:
                 text_list.append(line)
             else:
-                # 按句子分割
+                # Split by sentence
                 import re
                 sentences = re.split(r'([。！？.!?])', content)
                 current = ""
@@ -166,9 +166,9 @@ def generate_speech(text: str, voice_name: str = "S1", temperature: float = 0.9)
     if not text_list:
         raise ValueError("No valid dialogue lines found in text")
 
-    print(f"[TTS] 生成 {len(text_list)} 行对话，总长度: {sum(len(t) for t in text_list)}")
+    print(f"[TTS] Generated {len(text_list)} lines of dialogue, total length: {sum(len(t) for t in text_list)}")
 
-    # 生成音频（使用模型默认音色）
+    # Generate audio (using model default voice)
     import torchaudio
     import io
     audio = model.generate_dialogue(
@@ -177,14 +177,14 @@ def generate_speech(text: str, voice_name: str = "S1", temperature: float = 0.9)
         topk=30,
     )
 
-    # 保存为 WAV 字节
+    # Save as WAV bytes
     buf = io.BytesIO()
     torchaudio.save(buf, audio, 24000, format="wav")
     return buf.getvalue()
 
 
 def is_available() -> bool:
-    """检查 FireRedTTS2 是否可用"""
+    """Check if FireRedTTS2 is available"""
     try:
         from fireredtts2.fireredtts2 import FireRedTTS2
         return True
@@ -193,23 +193,23 @@ def is_available() -> bool:
 
 
 def check_and_download_model():
-    """启动时检查并自动下载 FireRedTTS2 模型"""
-    # 检查并安装 fireredtts2
+    """Check and automatically download FireRedTTS2 model on startup"""
+    # Check and install fireredtts2
     try:
         import fireredtts2
-        print(f"[TTS] fireredtts2 已安装")
+        print(f"[TTS] fireredtts2 is installed")
     except ImportError:
-        print(f"[TTS] 正在安装 fireredtts2...")
+        print(f"[TTS] Installing fireredtts2...")
         import subprocess
         import sys
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "fireredtts2"])
-            print(f"[TTS] fireredtts2 安装完成")
+            print(f"[TTS] fireredtts2 installation complete")
         except Exception as e:
-            print(f"[TTS] fireredtts2 安装失败: {e}")
+            print(f"[TTS] fireredtts2 installation failed: {e}")
             return
 
-    print(f"[TTS] 检查模型: {REPO_ID}")
-    print(f"[TTS] 首次使用时将自动从 HuggingFace 下载或使用本地缓存")
+    print(f"[TTS] Checking model: {REPO_ID}")
+    print(f"[TTS] Will automatically download from HuggingFace or use local cache on first use")
 
 

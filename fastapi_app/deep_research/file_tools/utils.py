@@ -355,22 +355,22 @@ def format_as_multimodal_message(
             for f, k in [(f, k) for f, k in files]:
                 if k == 'image':
                     if has_zh:
-                        upload.append(f'![图片]({f})')
+                        upload.append(f'![image]({f})')
                     else:
                         upload.append(f'![image]({f})')
                 elif k == 'video':
                     if has_zh:
-                        upload.append(f'![视频]({f})')
+                        upload.append(f'![video]({f})')
                     else:
                         upload.append(f'![video]({f})')
                 else:
                     if has_zh:
-                        upload.append(f'[文件]({f})')
+                        upload.append(f'[file]({f})')
                     else:
                         upload.append(f'[file]({f})')
             upload = ' '.join(upload)
             if has_zh:
-                upload = f'（上传了 {upload}）\n\n'
+                upload = f'(Uploaded {upload})\n\n'
             else:
                 upload = f'(Uploaded {upload})\n\n'
 

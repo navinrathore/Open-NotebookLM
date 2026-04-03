@@ -65,7 +65,7 @@ def _write_manifest_ids_to_supabase(manifest: Dict[str, Any]) -> None:
                         {"kb_file_id": file_id}
                     ).eq("user_email", email).eq("file_name", filename).execute()
         except Exception as e:
-            # 表无 kb_file_id 列等 schema 问题时静默跳过，不误导为“入库失败”或 API Key 错误
+            # Silently skip schema issues like missing kb_file_id column to avoid misleading "failed to store" or API Key errors
             err_msg = (getattr(e, "message", None) or getattr(e, "msg", None) or str(e) or "")
             if isinstance(err_msg, dict):
                 err_msg = str(err_msg)
@@ -138,7 +138,7 @@ async def create_embedding(
         vector_store_dir.mkdir(parents=True, exist_ok=True)
         mineru_output_base.mkdir(parents=True, exist_ok=True)
 
-        # 入库只用本地 embedding（Octen），不传 api_url，由 VectorStoreManager 使用环境变量 EMBEDDING_API_URL
+        # Use local embedding (Octen) only for ingestion; don't pass api_url, let VectorStoreManager use EMBEDDING_API_URL env var
         manifest = await process_knowledge_base_files(
             process_list,
             base_dir=str(vector_store_dir),
@@ -161,14 +161,14 @@ async def create_embedding(
             first_err = (failed[0].get("error") or "").strip()
             if not first_err:
                 failed_names = [Path(f.get("original_path", "")).name for f in failed]
-                first_err = f"未知错误（失败文件: {', '.join([n for n in failed_names if n])}）"
+                first_err = f"Unknown error (failed files: {', '.join([n for n in failed_names if n])})"
             try:
                 _write_manifest_ids_to_supabase(manifest)
             except Exception as e:
                 log.warning(f"Supabase writeback error: {e}")
             raise HTTPException(
                 status_code=422,
-                detail=f"向量入库失败: {first_err}"
+                detail=f"Vector ingestion failed: {first_err}"
             )
 
         try:
@@ -184,8 +184,8 @@ async def create_embedding(
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"向量入库失败: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="向量入库失败，请检查文件格式或联系管理员")
+        log.error(f"Vector ingestion failed: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Vector ingestion failed, please check file format or contact administrator")
 
 @router.get("/list")
 async def list_kb_files(
@@ -244,10 +244,10 @@ async def delete_vector(
         kwargs = {"base_dir": str(vector_store_dir)}
         manager = VectorStoreManager(**kwargs)
         manager.remove_file(file_id)
-        return {"success": True, "message": "向量已删除"}
+        return {"success": True, "message": "Vector deleted"}
     except Exception as e:
-        log.error(f"删除向量失败: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="删除向量失败")
+        log.error(f"Failed to delete vector: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete vector")
 
 
 @router.post("/search")

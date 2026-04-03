@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
+import { Lock, Mail, Loader2, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import ThemeToggle from '../components/ThemeToggle';
 
 type AuthMode = 'login' | 'register' | 'verify';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -123,29 +124,36 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#eef4ff_0%,#f7f9fc_48%,#eef2f7_100%)] px-4 py-10">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
+    <div className="min-h-screen bg-[var(--surface)] px-4 py-10 transition-colors duration-500 relative overflow-hidden">
+      {/* Theme Toggle for Auth Page */}
+      <div className="absolute top-6 right-6 z-20">
+        <ThemeToggle />
+      </div>
+
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="w-full rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-[0_24px_80px_rgba(15,23,42,0.10)]"
+          className="w-full rounded-[32px] border border-[var(--border)] bg-[var(--surface-low)] p-10 shadow-2xl backdrop-blur-md"
         >
-          <div className="mb-8 text-center">
-            <img src="/logo_small.png" alt="OpenNotebookLM" className="mx-auto mb-4 h-12 w-auto object-contain" />
-            <h1 className="text-3xl font-semibold text-slate-900">OpenNotebookLM</h1>
-            <p className="mt-2 text-sm text-slate-500">
-              {mode === 'register' ? 'Create account' : mode === 'verify' ? 'Verify email' : 'Sign in'}
+          <div className="mb-10 text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-[var(--accent)] to-blue-600 rounded-2xl mx-auto mb-6 flex items-center justify-center shadow-lg transform -rotate-6">
+              <Lock size={32} className="text-white" />
+            </div>
+            <h1 className="text-4xl font-black text-[var(--text-primary)] tracking-tight font-display mb-2">LawNidhi</h1>
+            <p className="text-sm text-[var(--text-secondary)] font-medium">
+              {mode === 'register' ? 'Create legal workspace' : mode === 'verify' ? 'Secure your account' : 'Enterprise Access'}
             </p>
           </div>
 
           {mode !== 'verify' && (
-            <div className="mb-6 flex rounded-2xl bg-slate-100 p-1">
+            <div className="mb-8 flex rounded-2xl bg-[var(--surface-high)] p-1.5 border border-[var(--border)]">
               <button
                 type="button"
                 onClick={() => switchMode('login')}
-                className={`flex-1 rounded-[14px] px-4 py-2.5 text-sm font-medium transition ${
-                  mode === 'login' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
+                  mode === 'login' ? 'bg-[var(--surface-low)] text-[var(--text-primary)] shadow-md border border-[var(--border)]' : 'text-[var(--text-secondary)]'
                 }`}
               >
                 Sign in
@@ -153,8 +161,8 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={() => switchMode('register')}
-                className={`flex-1 rounded-[14px] px-4 py-2.5 text-sm font-medium transition ${
-                  mode === 'register' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
+                  mode === 'register' ? 'bg-[var(--surface-low)] text-[var(--text-primary)] shadow-md border border-[var(--border)]' : 'text-[var(--text-secondary)]'
                 }`}
               >
                 Register
@@ -165,9 +173,9 @@ export default function AuthPage() {
           {mode === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Email</span>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <Mail size={18} className="text-slate-400" />
+                <span className="mb-2 block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Email Address</span>
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-high)] px-4 py-4 focus-within:ring-2 focus-within:ring-[var(--accent)]/30 transition-all">
+                  <Mail size={18} className="text-[var(--text-muted)]" />
                   <input
                     type="email"
                     autoComplete="email"
@@ -177,26 +185,26 @@ export default function AuthPage() {
                       if (localError) setLocalError('');
                     }}
                     onBlur={() => setEmailTouched(true)}
-                    placeholder="name@example.com"
+                    placeholder="counsel@legal.corp"
                     inputMode="email"
                     required
-                    className="w-full border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    className="w-full border-0 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
                   />
                 </div>
               </label>
               {showEmailError && <p className="text-sm text-rose-600">Enter a valid email address.</p>}
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Password</span>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <Lock size={18} className="text-slate-400" />
+                <span className="mb-2 block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Security Key</span>
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-high)] px-4 py-4 focus-within:ring-2 focus-within:ring-[var(--accent)]/30 transition-all">
+                  <Lock size={18} className="text-[var(--text-muted)]" />
                   <input
                     type="password"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    placeholder="••••••••"
+                    className="w-full border-0 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
                   />
                 </div>
               </label>
@@ -204,10 +212,10 @@ export default function AuthPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-[var(--accent)] px-5 py-4 text-sm font-bold text-white transition-all hover:bg-[var(--accent-dark)] shadow-xl shadow-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60 mt-4"
               >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                {loading ? 'Authenticating...' : 'Enter Workspace'}
               </button>
             </form>
           )}
@@ -215,9 +223,9 @@ export default function AuthPage() {
           {mode === 'register' && (
             <form onSubmit={handleRegister} className="space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Email</span>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <Mail size={18} className="text-slate-400" />
+                <span className="mb-2 block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Email Address</span>
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-high)] px-4 py-4 focus-within:ring-2 focus-within:ring-[var(--accent)]/30 transition-all">
+                  <Mail size={18} className="text-[var(--text-muted)]" />
                   <input
                     type="email"
                     autoComplete="email"
@@ -227,41 +235,41 @@ export default function AuthPage() {
                       if (localError) setLocalError('');
                     }}
                     onBlur={() => setEmailTouched(true)}
-                    placeholder="name@example.com"
+                    placeholder="counsel@legal.corp"
                     inputMode="email"
                     required
-                    className="w-full border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    className="w-full border-0 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
                   />
                 </div>
               </label>
               {showEmailError && <p className="text-sm text-rose-600">Enter a valid email address.</p>}
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Password</span>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <Lock size={18} className="text-slate-400" />
+                <span className="mb-2 block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Security Key</span>
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-high)] px-4 py-4 focus-within:ring-2 focus-within:ring-[var(--accent)]/30 transition-all">
+                  <Lock size={18} className="text-[var(--text-muted)]" />
                   <input
                     type="password"
                     autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="At least 6 characters"
-                    className="w-full border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    className="w-full border-0 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
                   />
                 </div>
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Confirm password</span>
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <Lock size={18} className="text-slate-400" />
+                <span className="mb-2 block text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Confirm Identity</span>
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-high)] px-4 py-4 focus-within:ring-2 focus-within:ring-[var(--accent)]/30 transition-all">
+                  <Lock size={18} className="text-[var(--text-muted)]" />
                   <input
                     type="password"
                     autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Enter it again"
-                    className="w-full border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    placeholder="Verify security key"
+                    className="w-full border-0 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
                   />
                 </div>
               </label>
@@ -269,10 +277,10 @@ export default function AuthPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-[var(--accent)] px-5 py-4 text-sm font-bold text-white transition-all hover:bg-[var(--accent-dark)] shadow-xl shadow-[var(--accent)]/20 disabled:cursor-not-allowed disabled:opacity-60 mt-4"
               >
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                {loading ? 'Creating account...' : 'Register'}
+                {loading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                {loading ? 'Registering...' : 'Complete Registration'}
               </button>
             </form>
           )}
@@ -338,13 +346,13 @@ export default function AuthPage() {
           )}
 
           {mode !== 'verify' && (
-            <div className="mt-6 text-center">
+            <div className="mt-8 text-center">
               <button
                 type="button"
                 onClick={continueAsGuest}
-                className="text-sm text-slate-500 hover:text-slate-700 underline"
+                className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest hover:text-[var(--accent)] transition-colors underline underline-offset-4"
               >
-                Continue as Guest
+                Continue as Trial Witness
               </button>
             </div>
           )}

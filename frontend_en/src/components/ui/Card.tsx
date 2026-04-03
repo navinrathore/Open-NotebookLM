@@ -73,7 +73,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     }
 
     return (
-      <div ref={ref} className={combinedStyles} {...props}>
+      <div ref={ref} className={combinedStyles} {...(props as any)}>
         {children}
       </div>
     );

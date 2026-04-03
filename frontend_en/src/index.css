@@ -13,24 +13,60 @@
  */
 
 :root {
-  /* Base background - warm off-white */
-  background-color: #FAFAF9;
+  /* Editorial Light Mode (Default) */
+  --surface: #FAFAF9;
+  --surface-low: #FFFFFF;
+  --surface-high: #F5F5F4;
+  
+  --text-primary: #171717;
+  --text-secondary: #737373;
+  --text-muted: #A3A3A3;
+  
+  --accent: #F43F5E; /* Rose 500 */
+  --accent-soft: #FFF1F2;
+  --accent-dark: #E11D48;
+  
+  --border: #E5E5E5;
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 
-  /* Set default font smoothing for crisp text */
+  background-color: var(--surface);
+
+  /* Font smoothing */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
+.dark {
+  /* Midnight Legal Theme */
+  --surface: #0A0A0A;
+  --surface-low: #171717;
+  --surface-high: #262626;
+  
+  --text-primary: #FAFAFA;
+  --text-secondary: #A3A3A3;
+  --text-muted: #525252;
+  
+  --accent: #6366F1; /* Indigo 500 */
+  --accent-soft: rgba(99, 102, 241, 0.1);
+  --accent-dark: #4F46E5;
+  
+  --border: #262626;
+  --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+}
+
 @layer base {
   body {
-    @apply bg-neutral-50 text-neutral-900 font-sans;
+    background-color: var(--surface);
+    color: var(--text-primary);
+    @apply font-sans;
     margin: 0;
   }
 
   /* Typography defaults */
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-semibold text-neutral-800 tracking-tight;
+    color: var(--text-primary);
+    @apply font-display font-semibold tracking-tight;
   }
 
   h1 {
@@ -51,7 +87,8 @@
 
   /* Links - editorial style */
   a {
-    @apply text-accent-600 hover:text-accent-700 transition-colors underline-offset-2;
+    color: var(--accent);
+    @apply hover:opacity-80 transition-colors underline-offset-2;
   }
 
   /* Strong emphasis */
@@ -61,7 +98,9 @@
 
   /* Code elements */
   code {
-    @apply font-mono text-sm bg-neutral-100 text-neutral-800 px-1.5 py-0.5 rounded;
+    background-color: var(--surface-high);
+    color: var(--text-primary);
+    @apply font-mono text-sm px-1.5 py-0.5 rounded border border-[var(--border)];
   }
 
   pre code {
@@ -70,7 +109,8 @@
 
   /* Selection color - accent coral */
   ::selection {
-    @apply bg-accent-200 text-accent-900;
+    background-color: var(--accent-soft);
+    color: var(--accent-dark);
   }
 }
 
@@ -100,12 +140,34 @@
     -webkit-backdrop-filter: blur(12px) saturate(150%);
   }
 
+  .dark .glass-subtle {
+    background: rgba(23, 23, 23, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /**
+   * Signature Glows for Midnight Legal
+   */
+  .glow-accent {
+    box-shadow: 0 0 20px -5px var(--accent);
+  }
+
+  .dark .glow-surface {
+    box-shadow: 0 10px 40px -15px rgba(0, 0, 0, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glow-text {
+    text-shadow: 0 0 12px var(--accent-soft);
+  }
+
   /**
    * Lifted effect - editorial signature
    * Creates shadow underneath like printed material
    */
   .lifted {
-    @apply shadow-lifted hover:shadow-lifted-hover transition-shadow;
+    box-shadow: var(--shadow);
+    @apply hover:shadow-lg transition-shadow;
   }
 
   .lifted-hover {

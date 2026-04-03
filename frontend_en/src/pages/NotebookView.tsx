@@ -5,10 +5,11 @@ import {
   BarChart2, Zap, AudioLines, Video, FileText,
   Filter, MoreVertical, Search, Image as ImageIcon, FileStack, Sparkles,
   Mic2, Video as VideoIcon, BrainCircuit, Send, Bot, User, Loader2, Upload, X,
-  Globe, Link2, Cloud, ChevronRight, LayoutGrid, Download, BookOpen, Brain
+  Globe, Link2, Cloud, ChevronRight, LayoutGrid, Download, BookOpen, Brain, Scale
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { apiFetch } from '../config/api';
+import ThemeToggle from '../components/ThemeToggle';
 import { getApiSettings } from '../services/apiSettingsService';
 import { fetchWithCache, invalidateCacheByPrefix } from '../services/clientCache';
 import type { KnowledgeFile, ChatMessage, ToolType } from '../types';
@@ -23,7 +24,7 @@ import { useToast } from '../hooks/useToast';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
-// 不做用户管理时使用，数据从 outputs 取
+// Used when no user management is active; data is fetched from outputs
 const DEFAULT_USER = { id: 'default', email: 'default' };
 
 type PendingSourceItem = {
@@ -72,7 +73,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const WELCOME_MSG: ChatMessage = {
     id: 'welcome',
     role: 'assistant',
-    content: '欢迎使用 OpenNotebookLM！我是你的智能知识库助手。\n\n在左侧上传文档，然后与我对话来探索、总结和生成洞察 —— 支持播客、思维导图、PPT、闪卡、测验等多种输出形式。',
+    content: 'Welcome to OpenNotebookLM! I am your intelligent knowledge base assistant.\n\nUpload documents on the left, then chat with me to explore, summarize, and generate insights — supporting podcasts, mind maps, PPTs, flashcards, quizzes, and more.',
     time: new Date().toLocaleTimeString()
   };
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([WELCOME_MSG]);
@@ -80,9 +81,9 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const conversationIdRef = React.useRef<string | null>(null);
   const [inputMsg, setInputMsg] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [chatLoadingStage, setChatLoadingStage] = useState('思考中...');
+  const [chatLoadingStage, setChatLoadingStage] = useState('Thinking...');
 
-  // 对话历史：本地持久化
+  // Conversation history: local persistence
   type ConversationItem = { id: string; title: string; messages: ChatMessage[]; updatedAt: number };
   const getConversationsKey = () => {
     const uid = effectiveUser?.id || effectiveUser?.email || '';
@@ -124,7 +125,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     title: string;
     sources: string;
     url?: string;
-    /** PPT 专用：PDF 预览地址，用于内嵌展示；url 为 PPTX 下载 */
+    /** PPT only: PDF preview URL for embedded display; url is PPTX download */
     previewUrl?: string;
     createdAt: string;
     mermaidCode?: string;
@@ -134,11 +135,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-
+  
   // Output preview
   const [previewOutput, setPreviewOutput] = useState<{
     id: string;
-    type: 'ppt' | 'mindmap' | 'podcast' | 'drawio' | 'flashcard' | 'quiz';
+    type: 'ppt' | 'mindmap' | 'podcast' | 'drawio' | 'flashcard' | 'quiz' | 'note';
     title: string;
     sources: string;
     url?: string;
@@ -146,9 +147,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     createdAt: string;
     mermaidCode?: string;
     setId?: string;
+    noteContent?: string;
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  /** DrawIO 预览：从 url 拉取后的 xml，用于在弹窗内嵌编辑 */
+  
+  /** DrawIO preview: XML fetched from url, used for embedded editing in modal */
   const [previewDrawioXml, setPreviewDrawioXml] = useState<string | null>(null);
   const [retrievalError, setRetrievalError] = useState('');
   const [retrievalModel, setRetrievalModel] = useState('text-embedding-3-large');
@@ -158,7 +161,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const [vectorActionLoading, setVectorActionLoading] = useState<Record<string, boolean>>({});
   const [vectorStatusByPath, setVectorStatusByPath] = useState<Record<string, string>>({});
 
-  // Fast Research 引入：搜索 + top10 作为来源
+  // Fast Research Import: search + top10 as sources
   const [fastResearchQuery, setFastResearchQuery] = useState('');
   const [fastResearchLoading, setFastResearchLoading] = useState(false);
   const [fastResearchSources, setFastResearchSources] = useState<Array<{ title: string; link: string; snippet: string }>>([]);
@@ -166,15 +169,15 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const [fastResearchError, setFastResearchError] = useState('');
   const [importingSources, setImportingSources] = useState(false);
   const [fileUploading, setFileUploading] = useState(false);
-  // Deep Research 报告生成
+  // Deep Research report generation
   const [deepResearchTopic, setDeepResearchTopic] = useState('');
   const [deepResearchLoading, setDeepResearchLoading] = useState(false);
   const [deepResearchError, setDeepResearchError] = useState('');
-  /** Deep Research 成功后的简要提示，在弹框内展示，不弹 alert */
+  /** Deep Research brief tip after success, shown in modal, no alert */
   const [deepResearchSuccess, setDeepResearchSuccess] = useState<{ topic: string; pdfUrl?: string } | null>(null);
   const [showIntroduceModal, setShowIntroduceModal] = useState(false);
   const [introduceOption, setIntroduceOption] = useState<'search' | 'deepresearch'>('search');
-  // 引入：网站 URL / 直接输入
+  // Import: Website URL / Direct input
   const [introduceUrl, setIntroduceUrl] = useState('');
   const [introduceUrlLoading, setIntroduceUrlLoading] = useState(false);
   const [introduceUrlError, setIntroduceUrlError] = useState('');
@@ -188,7 +191,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   ).length;
   const sourceListCount = files.length + pendingSources.length;
 
-  // 来源详情：点击某项后翻转显示解析内容（PDF 等解析为 markdown 展示）
+  // Source detail: flip to show parsed content when an item is clicked (PDF etc. parsed to markdown)
   const [sourceDetailView, setSourceDetailView] = useState<KnowledgeFile | null>(null);
   const [sourceDetailContent, setSourceDetailContent] = useState('');
   const [sourceDetailFormat, setSourceDetailFormat] = useState<'text' | 'markdown'>('text');
@@ -213,8 +216,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
   // Loading state for saved flashcard/quiz sets
   const [loadingSetId, setLoadingSetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<any>(null);
 
-  // 三栏可拖拽宽度（左 / 右，中间 flex 自适应）
+  // Three-column draggable width (left / right, middle flex auto)
   const [leftPanelWidth, setLeftPanelWidth] = useState(256);
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
   const [resizing, setResizing] = useState<'left' | 'right' | null>(null);
@@ -253,30 +258,30 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
   // Studio tools
   const studioTools: Array<{icon: React.ReactNode, label: string, id: ToolType}> = [
-    { icon: <ImageIcon className="text-orange-500" />, label: 'PPT生成', id: 'ppt' },
-    { icon: <BrainCircuit className="text-purple-500" />, label: '思维导图', id: 'mindmap' },
-    // DrawIO 图表功能暂时隐藏，后续修复
-    // { icon: <LayoutGrid className="text-teal-500" />, label: 'DrawIO 图表', id: 'drawio' },
-    { icon: <BookOpen className="text-indigo-500" />, label: '闪卡', id: 'flashcard' },
-    { icon: <Brain className="text-blue-500" />, label: '测验', id: 'quiz' },
-    { icon: <Mic2 className="text-red-500" />, label: '知识播客', id: 'podcast' },
-    { icon: <FileText className="text-green-500" />, label: '笔记', id: 'note' },
-    // 视频讲解暂未开放
-    // { icon: <VideoIcon className="text-blue-600" />, label: '视频讲解', id: 'video' },
+    { icon: <ImageIcon className="text-orange-500" />, label: 'PPT Generation', id: 'ppt' },
+    { icon: <BrainCircuit className="text-purple-500" />, label: 'Mindmap', id: 'mindmap' },
+    // DrawIO chart function hidden for now, fix later
+    // { icon: <LayoutGrid className="text-teal-500" />, label: 'DrawIO Chart', id: 'drawio' },
+    { icon: <BookOpen className="text-indigo-500" />, label: 'Flashcards', id: 'flashcard' },
+    { icon: <Brain className="text-blue-500" />, label: 'Quizzes', id: 'quiz' },
+    { icon: <Mic2 className="text-red-500" />, label: 'Podcast', id: 'podcast' },
+    { icon: <FileText className="text-green-500" />, label: 'Notes', id: 'note' },
+    // Video explanation not yet available
+    // { icon: <VideoIcon className="text-blue-600" />, label: 'Video Explain', id: 'video' },
   ];
 
-  // Studio：每个功能卡片各自配置，点卡片上的「…」翻转进该卡片的设置
+  // Studio: Each tool card independently configured. Click "..." on card to flip into its settings.
   type StudioToolId = 'ppt' | 'mindmap' | 'drawio' | 'flashcard' | 'quiz' | 'podcast' | 'video' | 'note';
   const [studioPanelView, setStudioPanelView] = useState<'tools' | 'settings'>('tools');
   const [studioSettingsTool, setStudioSettingsTool] = useState<StudioToolId | null>(null);
   const STORAGE_STUDIO_CONFIG = `kb_studio_config_${effectiveUser?.id || 'default'}`;
   const defaultByTool: Record<StudioToolId, Record<string, string>> = {
-    ppt: { llmModel: 'deepseek-v3.2', genFigModel: 'gemini-2.5-flash-image', stylePreset: 'modern', stylePrompt: '', language: 'zh', page_count: '10' },
+    ppt: { llmModel: 'deepseek-v3.2', genFigModel: 'gemini-2.5-flash-image', stylePreset: 'modern', stylePrompt: '', language: 'en', page_count: '10' },
     mindmap: { llmModel: 'deepseek-v3.2', mindmapStyle: 'default' },
-    drawio: { llmModel: 'deepseek-v3.2', diagramType: 'auto', diagramStyle: 'default', language: 'zh' },
-    flashcard: { llmModel: 'deepseek-v3.2', language: 'zh', cardCount: '20' },
-    quiz: { llmModel: 'deepseek-v3.2', language: 'zh', questionCount: '10' },
-    podcast: { llmModel: 'deepseek-v3.2', ttsType: 'qwen-tts-local', ttsModel: 'qwen-tts', voiceName: 'vivian', podcastMode: 'monologue', podcastLanguage: 'zh' },
+    drawio: { llmModel: 'deepseek-v3.2', diagramType: 'auto', diagramStyle: 'default', language: 'en' },
+    flashcard: { llmModel: 'deepseek-v3.2', language: 'en', cardCount: '20' },
+    quiz: { llmModel: 'deepseek-v3.2', language: 'en', questionCount: '10' },
+    podcast: { llmModel: 'deepseek-v3.2', ttsType: 'qwen-tts-local', ttsModel: 'qwen-tts', voiceName: 'vivian', podcastMode: 'monologue', podcastLanguage: 'en' },
     video: { llmModel: 'deepseek-v3.2' },
     note: {},
   };
@@ -305,7 +310,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     });
   };
 
-  // 是否已配置 API（用于鲁棒提醒）
+  // Is API configured (for robust reminder)
   const apiConfigured = (() => {
     const settings = getApiSettings(effectiveUser?.id || null);
     const url = settings?.apiUrl?.trim();
@@ -320,14 +325,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     return `kb_output_feed_${uid}`;
   };
 
-  /** 产出列表是否已完成首次加载（避免刷新时用空数组覆盖 localStorage） */
+  /** Has the output list finished first load (avoids overwriting localStorage with empty array on refresh) */
   const hasLoadedOutputsRef = React.useRef(false);
 
-  // 持久化当前对话到历史（仅在有除 welcome 外的消息时）
+  // Persist current chat to history (only if messages other than welcome exist)
   const persistCurrentConversation = (messages: ChatMessage[]) => {
     const list = messages.filter(m => m.id !== 'welcome');
     if (list.length === 0) return;
-    const title = (list.find(m => m.role === 'user')?.content || '新对话').slice(0, 30);
+    const title = (list.find(m => m.role === 'user')?.content || 'New Chat').slice(0, 30);
     const id = currentConversationId || `conv_${Date.now()}`;
     setCurrentConversationId(id);
     setConversationHistory(prev => {
@@ -384,27 +389,27 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   };
 
   const getOutputTitle = (type: 'ppt' | 'mindmap' | 'podcast' | 'drawio' | 'flashcard' | 'quiz') => {
-    if (type === 'mindmap') return '思维导图';
-    if (type === 'podcast') return '播客生成';
-    if (type === 'drawio') return 'DrawIO 图表';
-    if (type === 'flashcard') return '闪卡';
-    if (type === 'quiz') return '测验';
-    return 'PPT 生成';
+    if (type === 'mindmap') return 'Mindmap';
+    if (type === 'podcast') return 'Podcast';
+    if (type === 'drawio') return 'DrawIO Chart';
+    if (type === 'flashcard') return 'Flashcards';
+    if (type === 'quiz') return 'Quiz';
+    return 'PPT Generation';
   };
 
   const handleLoadSavedSet = async (item: typeof outputFeed[number]) => {
     if (!item.setId) {
-      showToast('加载失败：该条目没有保存的集合 ID，可能是在持久化功能添加之前创建的。', 'error');
+      showToast('Load failed: This entry has no saved Set ID, possibly created before the persistence function was added.', 'error');
       return;
     }
     setLoadingSetId(item.id);
     try {
-      const endpoint = item.type === 'flashcard'
-        ? `/api/v1/kb/get-flashcard-set?notebook_id=${encodeURIComponent(notebook.id)}&set_id=${encodeURIComponent(item.setId)}`
-        : `/api/v1/kb/get-quiz-set?notebook_id=${encodeURIComponent(notebook.id)}&set_id=${encodeURIComponent(item.setId)}`;
+      const endpoint = item.type === 'flashcard' 
+        ? `/api/v1/kb/get-flashcard-set?notebook_id=${encodeURIComponent(notebook.id)}&set_id=${encodeURIComponent(item.setId || '')}`
+        : `/api/v1/kb/get-quiz-set?notebook_id=${encodeURIComponent(notebook.id)}&set_id=${encodeURIComponent(item.setId || '')}`;
       const res = await apiFetch(endpoint);
       const data = await res.json();
-      if (!data.success) throw new Error(data.detail || '加载失败');
+      if (!data.success) throw new Error(data.detail || 'Load failed');
       if (item.type === 'flashcard') {
         setFlashcards(data.flashcards || []);
         setFlashcardSetId(data.id || '');
@@ -416,7 +421,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       }
     } catch (err) {
       console.error('Load saved set error:', err);
-      showToast('加载失败，数据可能已被删除。', 'error');
+      showToast('Load failed, data might have been deleted.', 'error');
     } finally {
       setLoadingSetId(null);
     }
@@ -468,7 +473,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               id: item.id || url || `output_${Date.now()}`,
               type,
               title: getOutputTitle(type),
-              sources: '历史产出',
+              sources: 'History',
               url,
               createdAt: item.created_at ? new Date(item.created_at).toLocaleString() : new Date().toLocaleString(),
               mermaidCode: undefined
@@ -482,7 +487,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       console.error('Failed to load output history:', err);
     }
 
-    // 从专用端点获取闪卡和测验历史
+    // Fetch historical flashcards and quizzes from dedicated endpoints
     if (notebook?.id) {
       const nbTitle = notebook?.title || notebook?.name || '';
       const fcParams = new URLSearchParams({ notebook_id: notebook.id, notebook_title: nbTitle });
@@ -499,7 +504,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               id: s.id || `flashcard_${s.set_id}`,
               type: 'flashcard',
               title: getOutputTitle('flashcard'),
-              sources: Array.isArray(s.source_files) ? s.source_files.map((f: string) => f.split('/').pop() || f).join(', ') : '历史产出',
+              sources: Array.isArray(s.source_files) ? s.source_files.map((f: string) => f.split('/').pop() || f).join(', ') : 'History',
               url: '',
               createdAt: s.created_at ? new Date(s.created_at).toLocaleString() : new Date().toLocaleString(),
               setId: s.set_id,
@@ -515,7 +520,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               id: s.id || `quiz_${s.set_id}`,
               type: 'quiz',
               title: getOutputTitle('quiz'),
-              sources: Array.isArray(s.source_files) ? s.source_files.map((f: string) => f.split('/').pop() || f).join(', ') : '历史产出',
+              sources: Array.isArray(s.source_files) ? s.source_files.map((f: string) => f.split('/').pop() || f).join(', ') : 'History',
               url: '',
               createdAt: s.created_at ? new Date(s.created_at).toLocaleString() : new Date().toLocaleString(),
               setId: s.set_id,
@@ -546,7 +551,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       const res = await apiFetch(`/api/v1/kb/list?${params.toString()}`);
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || '向量列表获取失败');
+        throw new Error(msg || 'Failed to fetch vector list');
       }
       const data = await res.json();
       const files = Array.isArray(data?.files) ? data.files : [];
@@ -556,13 +561,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       filtered.forEach((item: any) => {
         if (item?.original_path) {
           const key = getOutputsPath(item.original_path);
-          // 出现在向量列表里即视为已入库（后端 manifest 可能无 status 字段）
+          // Items in the vector list are considered embedded (backend manifest might lack a status field)
           statusMap[key] = item.status || 'embedded';
         }
       });
       setVectorStatusByPath(statusMap);
     } catch (err: any) {
-      setVectorError(err?.message || '向量列表获取失败');
+      setVectorError(err?.message || 'Failed to fetch vector list');
       setVectorFiles([]);
       setVectorStatusByPath({});
     } finally {
@@ -629,7 +634,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       let apiUrl = settings?.apiUrl?.trim() || '';
       const apiKey = settings?.apiKey?.trim() || '';
       if (!apiUrl || !apiKey) {
-        const msg = '请先在设置中配置 API URL 和 API Key';
+        const msg = 'Please configure API URL and API Key in settings first';
         setVectorError(msg);
         showToast(msg, 'warning');
         return;
@@ -639,7 +644,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       }
       const filePath = getOutputsPath(item.original_path);
       if (!filePath) {
-        setVectorError('无法获取文件路径');
+        setVectorError('Failed to get file path');
         return;
       }
       const body: Record<string, unknown> = {
@@ -657,7 +662,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         body: JSON.stringify(body)
       });
       if (!res.ok) {
-        let msg = '重新入库失败';
+        let msg = 'Failed to re-embed';
         try {
           const body = await res.json();
           msg = body?.detail || body?.message || msg;
@@ -665,7 +670,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           msg = await res.text() || msg;
         }
         if (res.status === 401 || (typeof msg === 'string' && msg.includes('401'))) {
-          msg = 'API 认证失败（401），请到设置中检查 API Key 是否正确。';
+          msg = 'API authentication failed (401), please check if API Key is correct in settings.';
         }
         throw new Error(msg);
       }
@@ -673,7 +678,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       await refreshVectorList();
       await fetchFiles();
     } catch (err: any) {
-      setVectorError(err?.message || '重新入库失败');
+      setVectorError(err?.message || 'Failed to re-embed');
     } finally {
       setVectorActionLoading(prev => ({ ...prev, [key]: false }));
     }
@@ -682,7 +687,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const handleDeleteVector = async (item: any) => {
     const key = item.id || item.original_path;
     if (!key) return;
-    if (!confirm('确认删除该向量吗？删除后检索将不再返回该文件内容。')) {
+    if (!confirm('Confirm to delete this vector? Once deleted, retrieval will no longer return content from this file.')) {
       return;
     }
     setVectorActionLoading(prev => ({ ...prev, [key]: true }));
@@ -698,18 +703,18 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       });
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(msg || '删除向量失败');
+        throw new Error(msg || 'Failed to delete vector');
       }
       await res.json();
       await refreshVectorList();
     } catch (err: any) {
-      setVectorError(err?.message || '删除向量失败');
+      setVectorError(err?.message || 'Failed to delete vector');
     } finally {
       setVectorActionLoading(prev => ({ ...prev, [key]: false }));
     }
   };
 
-  // Fetch files from outputs when notebook changes（不做用户管理，数据从 outputs 取）
+  // Fetch files from outputs when notebook changes (no user management, fetch from outputs)
   useEffect(() => {
     if (notebook?.id) fetchFiles();
   }, [effectiveUser?.id, notebook?.id]);
@@ -749,7 +754,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         const list = msgData?.messages || [];
         if (list.length > 0) {
           const msgs: ChatMessage[] = [
-            { id: 'welcome', role: 'assistant', content: '你好！我是你的知识库助手。请上传文件或在左侧来源区域选择文件，然后在此处进行提问。', time: '' },
+            { id: 'welcome', role: 'assistant', content: 'Hello! I am your knowledge base assistant. Please upload files or select files in the Source section on the left, then ask questions here.', time: '' },
             ...list.map((m: any, i: number) => ({
               id: m.id || `msg_${i}`,
               role: m.role as 'user' | 'assistant',
@@ -828,7 +833,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     };
   }, [effectiveUser?.id, effectiveUser?.email, notebook?.id]);
 
-  // Persist output feed locally (仅在首次加载完成后写入，避免刷新时用 [] 覆盖)
+  // Persist output feed locally (write only after first load to avoid overwriting with [] on refresh)
   useEffect(() => {
     if (!hasLoadedOutputsRef.current) return;
     saveLocalOutputFeed(outputFeed);
@@ -847,7 +852,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       try {
         setPreviewLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error('读取思维导图失败');
+        if (!res.ok) throw new Error('Failed to read mindmap');
         const text = await res.text();
         if (!canceled) {
           setPreviewOutput(prev => prev ? { ...prev, mermaidCode: text } : prev);
@@ -864,7 +869,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     };
   }, [previewOutput?.id, previewOutput?.type, previewOutput?.url, previewOutput?.mermaidCode]);
 
-  // DrawIO 预览：从 url 拉取 xml 以在弹窗内嵌编辑
+  // DrawIO preview: fetch xml from url for embedded editing in modal
   useEffect(() => {
     if (!previewOutput || previewOutput.type !== 'drawio' || !previewOutput.url) {
       setPreviewDrawioXml(null);
@@ -887,9 +892,9 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     };
   }, [previewOutput?.id, previewOutput?.type, previewOutput?.url]);
 
-  // 本地笔记本 id 形如 local_xxx，不能作为 Supabase kb_id（UUID）
+  // Local notebook id format local_xxx, cannot be used as Supabase kb_id (UUID)
   const isLocalNotebookId = (id: string) => typeof id === 'string' && id.startsWith('local_');
-  // 每个笔记本独立来源：Supabase 用 kb_id；本地用 localStorage key 带 notebookId
+  // Each notebook independent sources: Supabase uses kb_id; local uses localStorage key with notebookId
   const getFilesStorageKey = () => {
     const uid = effectiveUser?.id || 'default';
     if (notebook?.id) return `kb_files_${uid}_${notebook.id}`;
@@ -921,7 +926,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 email: effectiveUser.email || effectiveUser.id,
               });
               const res = await apiFetch(`/api/v1/kb/files?${params.toString()}`);
-              if (!res.ok) throw new Error('来源列表获取失败');
+              if (!res.ok) throw new Error('Failed to fetch source list');
               const data = await res.json();
               const list = Array.isArray(data?.files) ? data.files : [];
               return list.map((row: any) => ({
@@ -996,7 +1001,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     )));
   };
 
-  /** PDF / .md 等可解析为正文并预览 */
+  /** PDF / .md etc. can be parsed as text and previewed */
   const isPreviewableDoc = (f: KnowledgeFile) => {
     const name = (f.name || '').toLowerCase();
     const url = (f.url || '').toLowerCase();
@@ -1038,17 +1043,17 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               body: JSON.stringify({ url: file.url })
             });
             if (!res.ok) {
-              return { content: '[抓取失败]', format: 'text' };
+              return { content: '[Fetch failed]', format: 'text' };
             }
             const data = await res.json();
-            return { content: data?.content ?? '[无内容]', format: 'text' };
+            return { content: data?.content ?? '[No content]', format: 'text' };
           },
           { useStaleOnError: true }
         );
         setSourceDetailContent(detail.content);
         setSourceDetailFormat(detail.format);
       } catch {
-        setSourceDetailContent('[请求失败]');
+        setSourceDetailContent('[Request failed]');
         setSourceDetailFormat('text');
       } finally {
         setSourceDetailLoading(false);
@@ -1077,11 +1082,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               body: JSON.stringify({ path_or_url: file.url })
             });
             if (!res.ok) {
-              return { content: '[解析失败]', format: 'text' };
+              return { content: '[Parsing failed]', format: 'text' };
             }
             const data = await res.json();
             return {
-              content: data?.content ?? '[无内容]',
+              content: data?.content ?? '[No content]',
               format: (data?.format === 'markdown' ? 'markdown' : 'text') as 'text' | 'markdown',
             };
           },
@@ -1090,15 +1095,15 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         setSourceDetailContent(detail.content);
         setSourceDetailFormat(detail.format);
       } catch {
-        setSourceDetailContent('[请求失败]');
+        setSourceDetailContent('[Request failed]');
         setSourceDetailFormat('text');
       } finally {
         setSourceDetailLoading(false);
       }
     } else if (file.url && (file.url.startsWith('http') || file.url.startsWith('/'))) {
-      setSourceDetailContent(`[文件预览] ${file.name}\n\n可在新标签页打开: ${file.url}`);
+      setSourceDetailContent(`[File preview] ${file.name}\n\nOpen in new tab: ${file.url}`);
     } else {
-      setSourceDetailContent(`[暂无解析预览] ${file.name}`);
+      setSourceDetailContent(`[No parsed preview available] ${file.name}`);
     }
   };
 
@@ -1134,7 +1139,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     const searchEngine = (settings?.searchEngine as 'google' | 'baidu') || 'google';
     const searchApiKey = settings?.searchApiKey?.trim() ?? '';
     if ((searchProvider === 'serpapi' || searchProvider === 'bocha') && !searchApiKey) {
-      setFastResearchError('请先在右上角「设置」中配置搜索 API Key');
+      setFastResearchError('Please configure Search API Key in Settings (top right) first');
       return;
     }
     setFastResearchLoading(true);
@@ -1156,14 +1161,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail || data?.message || 'Fast Research 请求失败');
+        throw new Error(data?.detail || data?.message || 'Fast Research request failed');
       }
       const data = await res.json();
       const sources = data?.sources || [];
       setFastResearchSources(sources);
       setFastResearchSelected(new Set(sources.map((_: any, i: number) => i)));
     } catch (err: any) {
-      setFastResearchError(err?.message || '搜索失败');
+      setFastResearchError(err?.message || 'Search failed');
     } finally {
       setFastResearchLoading(false);
     }
@@ -1176,7 +1181,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       .map(({ title, link, snippet }) => ({ title, link, snippet }));
     if (items.length === 0) return;
     if (!notebook?.id || !effectiveUser?.email) {
-      showToast('请先选择笔记本并登录', 'warning');
+      showToast('Please select a notebook and login first', 'warning');
       return;
     }
     setImportingSources(true);
@@ -1194,7 +1199,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail || data?.message || '导入失败');
+        throw new Error(data?.detail || data?.message || 'Import failed');
       }
       const data = await res.json();
       invalidateNotebookSourceCaches();
@@ -1202,10 +1207,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       await refreshVectorList();
       setFastResearchSources([]);
       setFastResearchSelected(new Set());
-      const embeddedMsg = data?.embedded ? `，已向量化 ${data.embedded} 个` : '';
-      showToast(`已导入 ${data?.imported ?? items.length} 个来源${embeddedMsg}`, 'success');
+      const embeddedMsg = data?.embedded ? `, embedded ${data.embedded} ` : '';
+      setIntroduceTextSuccess('Added to sources');
     } catch (err: any) {
-      showToast(err?.message || '导入失败', 'error');
+      showToast(err?.message || 'Import failed', 'error');
     } finally {
       setImportingSources(false);
     }
@@ -1214,11 +1219,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const handleImportUrlAsSource = async () => {
     const url = introduceUrl.trim();
     if (!url) {
-      setIntroduceUrlError('请输入网页 URL');
+      setIntroduceUrlError('Please enter website URL');
       return;
     }
     if (!notebook?.id || !effectiveUser?.email) {
-      setIntroduceUrlError('请先选择笔记本');
+      setIntroduceUrlError('Please select a notebook first');
       return;
     }
     setIntroduceUrlError('');
@@ -1237,7 +1242,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail || data?.message || '抓取失败');
+        throw new Error(data?.detail || data?.message || 'Fetch failed');
       }
       const data = await res.json();
       const newFile: KnowledgeFile = {
@@ -1255,10 +1260,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       invalidateNotebookSourceCaches();
       await fetchFiles();
       setIntroduceUrl('');
-      setIntroduceUrlSuccess('已抓取并加入来源');
+      setIntroduceUrlSuccess('Fetched and added to sources');
       setTimeout(() => setIntroduceUrlSuccess(''), 3000);
     } catch (err: any) {
-      setIntroduceUrlError(err?.message || '抓取失败');
+      setIntroduceUrlError(err?.message || 'Fetch failed');
     } finally {
       setIntroduceUrlLoading(false);
     }
@@ -1267,11 +1272,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const handleAddTextSource = async () => {
     const content = introduceText.trim();
     if (!content) {
-      setIntroduceTextError('请输入或粘贴文字');
+      setIntroduceTextError('Please enter or paste text');
       return;
     }
     if (!notebook?.id || !effectiveUser?.email) {
-      setIntroduceTextError('请先选择笔记本');
+      setIntroduceTextError('Please select a notebook first');
       return;
     }
     setIntroduceTextError('');
@@ -1285,13 +1290,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           email: effectiveUser.email || effectiveUser.id,
           user_id: effectiveUser.id,
           notebook_title: notebook?.title || notebook?.name || '',
-          title: '直接输入',
+          title: 'Direct input',
           content,
         }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail || data?.message || '添加失败');
+        throw new Error(data?.detail || data?.message || 'Failed to add');
       }
       const data = await res.json();
       const newFile: KnowledgeFile = {
@@ -1309,10 +1314,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       invalidateNotebookSourceCaches();
       await fetchFiles();
       setIntroduceText('');
-      setIntroduceTextSuccess('已添加为来源');
+      setIntroduceTextSuccess('Added to sources');
       setTimeout(() => setIntroduceTextSuccess(''), 3000);
     } catch (err: any) {
-      setIntroduceTextError(err?.message || '添加失败');
+      setIntroduceTextError(err?.message || 'Failed to add');
     } finally {
       setIntroduceTextLoading(false);
     }
@@ -1327,15 +1332,15 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     const searchEngine = (settings?.searchEngine as 'google' | 'baidu') || 'google';
     const searchApiKey = settings?.searchApiKey?.trim() ?? '';
     if (!apiUrl || !apiKey) {
-      setDeepResearchError('请先在设置中配置 API');
+      setDeepResearchError('Please configure API in settings first');
       return;
     }
     if (!searchApiKey) {
-      setDeepResearchError('请先在设置中配置搜索 API Key');
+      setDeepResearchError('Please configure Search API Key in settings first');
       return;
     }
-    if (!notebook?.id || !effectiveUser?.email) {
-      setDeepResearchError('请先选择笔记本');
+    if (!notebook?.id) {
+      setDeepResearchError('Please select a notebook first');
       return;
     }
     setDeepResearchLoading(true);
@@ -1362,7 +1367,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.detail || data?.message || '生成报告失败');
+        throw new Error(data?.detail || data?.message || 'Failed to generate report');
       }
       const data = await res.json();
       if (data.added_as_source && data.added_file) {
@@ -1388,7 +1393,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         pdfUrl: data?.pdf_url || data?.report_url,
       });
     } catch (err: any) {
-      setDeepResearchError(err?.message || '生成失败');
+      setDeepResearchError(err?.message || 'Generation failed');
     } finally {
       setDeepResearchLoading(false);
     }
@@ -1413,7 +1418,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     const uploadQueue = Array.from(inputFiles || []);
     if (!uploadQueue.length) return;
     if (!notebook?.id) {
-      showToast('请先选择或创建一个笔记本再上传文件', 'warning');
+      showToast('Please select or create a notebook before uploading files', 'warning');
       return;
     }
 
@@ -1431,9 +1436,9 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     setFileUploading(true);
     showToast(
       uploadQueue.length > 1
-        ? `已添加 ${uploadQueue.length} 个文件，正在处理`
-        : `已添加 ${uploadQueue[0].name}，正在处理`,
-      'info'
+        ? `Added ${uploadQueue.length} files, processing`
+        : `Added ${uploadQueue[0].name}, processing`,
+      'success'
     );
 
     let successCount = 0;
@@ -1458,7 +1463,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            throw new Error(data?.detail || data?.message || `上传 ${file.name} 失败`);
+            throw new Error(data?.detail || data?.message || `Failed to upload ${file.name}`);
           }
 
           const newFile: KnowledgeFile = {
@@ -1477,7 +1482,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           successCount += 1;
           if (data.embedded) embeddedCount += 1;
         } catch (err: any) {
-          const msg = err?.message || `上传 ${file.name} 失败`;
+          const msg = err?.message || `Failed to upload ${file.name}`;
           console.error('Upload error:', err);
           markPendingSourceError(pendingItem.id, msg);
           setRetrievalError(msg);
@@ -1492,15 +1497,15 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         if (failureCount === 0) {
           showToast(
             embeddedCount === successCount
-              ? `已完成 ${successCount} 个来源导入并入库`
-              : `已完成 ${successCount} 个来源导入`,
+              ? `Completed import and embedding of ${successCount} sources`
+              : `Completed import of ${successCount} sources`,
             'success'
           );
         } else {
-          showToast(`已完成 ${successCount} 个来源导入，${failureCount} 个失败`, 'warning');
+          showToast(`Completed ${successCount} source imports, ${failureCount} failed`, 'warning');
         }
       } else if (failureCount > 0) {
-        showToast(`上传失败：${failureCount} 个文件未处理成功`, 'error');
+        showToast(`Upload failed: ${failureCount} files not processed successfully`, 'error');
       }
     } finally {
       setFileUploading(false);
@@ -1521,14 +1526,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     setChatMessages(prev => [...prev, userMsg]);
     setInputMsg('');
     setIsChatLoading(true);
-    setChatLoadingStage('正在准备来源...');
+    setChatLoadingStage('Preparing sources...');
 
     try {
       if (selectedIds.size === 0) {
         const botMsg: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: '请先在左侧来源列表中勾选至少一个文件，我才能基于这些资料回答您的问题。',
+          content: 'Please select at least one file from the sources list on the left so I can answer your question based on these materials.',
           time: new Date().toLocaleTimeString()
         };
         setChatMessages(prev => [...prev, botMsg]);
@@ -1614,11 +1619,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           return;
         }
         if (event.type === 'stage') {
-          setChatLoadingStage(event.message || '思考中...');
+          setChatLoadingStage(event.message || 'Thinking...');
           return;
         }
         if (event.type === 'delta') {
-          if (!streamedContent) setChatLoadingStage('正在生成回答...');
+          if (!streamedContent) setChatLoadingStage('Generating answer...');
           streamedContent += event.delta || '';
           syncAssistantMessage();
           return;
@@ -1651,7 +1656,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       const botMsg: ChatMessage = {
         id: assistantMessageId,
         role: 'assistant',
-        content: streamedContent || "抱歉，我无法回答这个问题。",
+        content: streamedContent || "Sorry, I cannot answer this question.",
         time: assistantTime,
         details: streamedDetails,
         sourceMapping: streamedSourceMapping,
@@ -1676,11 +1681,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       }
     } catch (err) {
       console.error("Chat error:", err);
-      const errorContent = err instanceof Error ? err.message : "发生错误，请稍后重试。";
+      const errorContent = err instanceof Error ? err.message : "An error occurred, please try again later.";
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: errorContent || "发生错误，请稍后重试。",
+        content: errorContent || "An error occurred, please try again later.",
         time: new Date().toLocaleTimeString()
       };
       setChatMessages(prev => {
@@ -1691,14 +1696,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       persistCurrentConversation([...chatMessages, userMsg, errorMsg]);
     } finally {
       setIsChatLoading(false);
-      setChatLoadingStage('思考中...');
+      setChatLoadingStage('Thinking...');
     }
   };
 
   // Tool handlers (PPT, Mindmap, etc.)
   const handleToolGenerate = async (tool: ToolType) => {
     if (selectedIds.size === 0) {
-      showToast('请先选择至少一个文件', 'warning');
+      showToast('Please select at least one file first', 'warning');
       return;
     }
 
@@ -1714,7 +1719,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       const apiUrl = settings?.apiUrl?.trim() || '';
       const apiKey = settings?.apiKey?.trim() || '';
       if (!apiUrl || !apiKey) {
-        showToast('请先在设置中配置 API URL 和 API Key', 'warning');
+        showToast('Please configure API URL and API Key in settings first', 'warning');
         setToolLoading(false);
         return;
       }
@@ -1763,13 +1768,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         });
         const validSources = [...validDocFiles, ...linkFiles];
         if (validSources.length === 0) {
-          showToast('请至少选择 1 个文档或网页来源进行生成（支持 PDF/PPTX/DOCX/MD 或网页引入）。', 'warning');
+          showToast('Please select at least 1 document or website source to generate (supports PDF/PPTX/DOCX/MD or website import).', 'warning');
           setToolLoading(false);
           return;
         }
         const docPaths = validSources.map(f => f.url).filter(Boolean) as string[];
         if (docPaths.length !== validSources.length) {
-          showToast('无法获取文档/网页路径，请重试。', 'error');
+          showToast('Cannot get document/website path, please try again.', 'error');
           setToolLoading(false);
           return;
         }
@@ -1779,10 +1784,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
         const getStyleDescription = (preset: string): string => {
           const styles: Record<string, string> = {
-            modern: '现代简约风格，使用干净的线条和充足的留白',
-            business: '商务专业风格，稳重大气，适合企业演示',
-            academic: '学术报告风格，清晰的层次结构，适合论文汇报',
-            creative: '创意设计风格，活泼生动，色彩丰富',
+            modern: 'Modern minimalist style, using clean lines and ample white space',
+            business: 'Business professional style, solid and atmospheric, suitable for corporate presentations',
+            academic: 'Academic report style, clear hierarchical structure, suitable for academic reports',
+            creative: 'Creative design style, lively and vivid, rich in colors',
           };
           return styles[preset] || styles.modern;
         };
@@ -1871,7 +1876,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       const data = await res.json();
       setToolOutput(data);
       
-      // 保存到产出信息流
+      // Save to output feed
       const now = new Date().toLocaleString();
       if (tool === 'ppt') {
         const pdfUrl = data?.pdf_path;
@@ -1881,8 +1886,8 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           {
             id: data.output_file_id || `ppt_${Date.now()}`,
             type: 'ppt',
-            title: 'PPT 生成',
-            sources: selectedNames.length ? selectedNames.join('、') : `来源 ${selectedIds.size}`,
+            title: 'PPT Generation',
+            sources: selectedNames.length ? selectedNames.join(', ') : `Sources ${selectedIds.size}`,
             url: downloadUrl,
             previewUrl: pdfUrl,
             createdAt: now,
@@ -1895,14 +1900,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         const outputItem = {
           id: data.output_file_id || `mindmap_${Date.now()}`,
           type: 'mindmap' as const,
-          title: '思维导图',
-          sources: selectedNames.length ? selectedNames.join('、') : `来源 ${selectedIds.size}`,
+          title: 'Mindmap',
+          sources: selectedNames.length ? selectedNames.join(', ') : `Sources ${selectedIds.size}`,
           url,
           createdAt: now,
           mermaidCode
         };
         setOutputFeed(prev => [outputItem, ...prev]);
-        // 同时在工具输出区域显示
+        // Also display in tool output area
         setToolOutput({ ...data, mermaid_code: mermaidCode });
       } else if (tool === 'podcast') {
         const url = data.audio_path || data.audio_url;
@@ -1910,8 +1915,8 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           {
             id: data.output_file_id || `podcast_${Date.now()}`,
             type: 'podcast',
-            title: '播客生成',
-            sources: selectedNames.length ? selectedNames.join('、') : `来源 ${selectedIds.size}`,
+            title: 'Podcast Generation',
+            sources: selectedNames.length ? selectedNames.join(', ') : `Sources ${selectedIds.size}`,
             url,
             createdAt: now,
           },
@@ -1923,8 +1928,8 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           {
             id: data.output_file_id || `drawio_${Date.now()}`,
             type: 'drawio',
-            title: 'DrawIO 图表',
-            sources: selectedNames.length ? selectedNames.join('、') : `来源 ${selectedIds.size}`,
+            title: 'DrawIO Chart',
+            sources: selectedNames.length ? selectedNames.join(', ') : `Sources ${selectedIds.size}`,
             url,
             createdAt: now,
           },
@@ -1939,8 +1944,8 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           {
             id: data.flashcard_set_id || `flashcard_${Date.now()}`,
             type: 'flashcard',
-            title: '闪卡',
-            sources: selectedNames.length ? selectedNames.join('、') : `来源 ${selectedIds.size}`,
+            title: 'Flashcards',
+            sources: selectedNames.length ? selectedNames.join(', ') : `Sources ${selectedIds.size}`,
             url: '',
             createdAt: now,
             setId: fcSetId || String(Date.now()),
@@ -1956,8 +1961,8 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           {
             id: data.quiz_id || `quiz_${Date.now()}`,
             type: 'quiz',
-            title: '测验',
-            sources: selectedNames.length ? selectedNames.join('、') : `来源 ${selectedIds.size}`,
+            title: 'Quiz',
+            sources: selectedNames.length ? selectedNames.join(', ') : `Sources ${selectedIds.size}`,
             url: '',
             createdAt: now,
             setId: qzSetId || String(Date.now()),
@@ -1968,7 +1973,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
     } catch (err) {
       console.error('Tool generation error:', err);
-      showToast('生成失败，请重试', 'error');
+      showToast('Generation failed, please try again', 'error');
     } finally {
       setToolLoading(false);
     }
@@ -1992,19 +1997,19 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     if (!text) return '';
     const mathSlots: string[] = [];
     let processed = text;
-    // 处理 \(...\) 行内公式
+    // Handle \(...\) inline formula
     processed = processed.replace(/\\\((.+?)\\\)/g, (_m, tex) => {
       mathSlots.push(renderKatex(tex, false));
       return `\x00MATH${mathSlots.length - 1}\x00`;
     });
-    // 处理 \[...\] 块级公式
+    // Handle \[...\] block formula
     processed = processed.replace(/\\\[(.+?)\\\]/g, (_m, tex) => {
       mathSlots.push(renderKatex(tex, true));
       return `\x00MATH${mathSlots.length - 1}\x00`;
     });
-    // 转义HTML
+    // Escape HTML
     processed = escapeHtml(processed);
-    // 还原公式
+    // Restore formula
     processed = processed.replace(/\x00MATH(\d+)\x00/g, (_m, idx) => mathSlots[Number(idx)]);
     return processed;
   };
@@ -2015,7 +2020,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     sourcePreviewMapping?: Record<string, string>,
     sourceReferenceMapping?: Record<string, CitationReference>
   ) => {
-    // 1) 先提取行内公式，支持 $...$ 和 \(...\) 格式
+    // 1) Extract inline formula first, support $...$ and \(...\) formats
     const mathSlots: string[] = [];
     let protected_ = text
       .replace(/\\\((.+?)\\\)/g, (_m, tex) => {
@@ -2026,7 +2031,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         mathSlots.push(renderKatex(tex, false));
         return `\x00MATH${mathSlots.length - 1}\x00`;
       });
-    // 2) 正常 escapeHtml + markdown 处理
+    // 2) Normal escapeHtml + markdown processing
     let html = escapeHtml(protected_);
     html = html.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-gray-100 text-gray-800 font-mono text-xs">$1</code>');
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -2037,7 +2042,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
       const hasSource = sourceReferenceMapping?.[num] || sourceMapping?.[num];
       return `<sup class="cite-ref" data-cite="${num}"${hasSource ? ' data-source-tooltip="1"' : ''} style="background-color:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:4px;font-size:0.75em;font-weight:600;margin:0 1px;cursor:pointer;position:relative;">[${num}]</sup>`;
     });
-    // 3) 还原公式占位符
+    // 3) Restore formula placeholders
     html = html.replace(/\x00MATH(\d+)\x00/g, (_m, idx) => mathSlots[Number(idx)]);
     return html;
   };
@@ -2049,7 +2054,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     sourceReferenceMapping?: Record<string, CitationReference>
   ) => {
     if (!content) return '';
-    // 先提取块级公式，支持 $$...$$ 和 \[...\] 格式
+    // Extract block formula first, support $$...$$ and \[...\] formats
     const blockMathSlots: string[] = [];
     let processed = content
       .replace(/\\\[([\s\S]+?)\\\]/g, (_m, tex) => {
@@ -2137,7 +2142,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     }
 
     html += processTextBlock(processed.slice(lastIndex));
-    // 还原块级公式占位符
+    // Restore block formula placeholders
     html = html.replace(/%%BLOCKMATH(\d+)%%/g, (_m, idx) => blockMathSlots[Number(idx)]);
     return html;
   };
@@ -2223,7 +2228,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     />
   );
 
-  /** 将可能带后端的完整 URL 转为同源路径，避免跨域 fetch/打开导致失败或崩溃 */
+  /** Convert potentially back-end full URL to same-source path to avoid cross-origin fetch/open failure or crash */
   const getSameOriginUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return '';
     const trimmed = url.trim();
@@ -2246,7 +2251,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   return (
     <>
       {ToastContainer}
-      <div className="h-screen flex flex-col bg-[#f8f9fa] overflow-hidden">
+      <div className="h-screen flex flex-col bg-[var(--surface)] overflow-hidden transition-colors duration-500">
       {/* Citation tooltip styles */}
       <style>{`
         .cite-ref[data-source-tooltip] {
@@ -2309,41 +2314,45 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         </div>
       )}
       {/* Header */}
-      <header className="h-14 glass border-b border-white/30 flex items-center justify-between px-4 shrink-0">
+      <header className="h-16 bg-[var(--surface-low)] border-b border-[var(--border)] flex items-center justify-between px-6 shrink-0 z-30 shadow-sm transition-all">
         <div className="flex items-center gap-4">
-          <motion.button whileTap={{ scale: 0.9 }} onClick={onBack} className="p-2 hover:bg-white/50 rounded-ios text-ios-gray-600 transition-colors">
+          <motion.button whileTap={{ scale: 0.9 }} onClick={onBack} className="p-2.5 hover:bg-[var(--surface-high)] rounded-xl text-[var(--text-secondary)] transition-colors border border-[var(--border)]">
             <ChevronLeft size={20} />
           </motion.button>
-          <img src="/logo_small.png" alt="Logo" className="h-8 w-auto object-contain" />
-          <h1 className="font-medium text-ios-gray-900 truncate max-w-[300px]">
-            {notebook?.title || 'Semantic Rewards for Low-Resource Language Alignment'}
+          <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-600 rounded-xl flex items-center justify-center shadow-lg rotate-3">
+             <Scale size={24} className="text-white" />
+          </div>
+          <h1 className="font-bold text-[var(--text-primary)] truncate max-w-[300px] tracking-tight">
+            {notebook?.title || 'Legal Analysis Workspace'}
           </h1>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* 右上方添加笔记 - 暂未使用，先注释
+          {/* Top right add note - currently unused, commented out for now
           <button className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-white rounded-full text-sm font-medium hover:bg-gray-800 transition-colors">
             <Plus size={16} />
-            创建笔记本
+            Create Notebook
           </button>
           */}
-          {/* 右侧上方分析和分享 - 暂未使用，先注释
+          {/* Top right analysis and share - currently unused, commented out for now
           <button className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-gray-100 rounded-full text-sm font-medium transition-colors">
             <BarChart2 size={16} />
-            分析
+            Analysis
           </button>
           <button className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-gray-100 rounded-full text-sm font-medium transition-colors">
             <Share2 size={16} />
-            分享
+            Share
           </button>
           */}
+          <ThemeToggle />
+          <div className="h-6 w-[1px] bg-[var(--border)] mx-2"></div>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => setShowSettingsModal(true)}
-            className="p-2 hover:bg-white/50 rounded-ios transition-colors"
-            title="API 设置"
+            className="p-2.5 hover:bg-[var(--surface-high)] rounded-xl transition-colors border border-[var(--border)]"
+            title="API Settings"
           >
-            <Settings size={20} className="text-ios-gray-500" />
+            <Settings size={20} className="text-[var(--text-secondary)]" />
           </motion.button>
           <div className="h-4 w-[1px] bg-ios-gray-200 mx-1"></div>
           <div className="text-xs font-medium bg-ios-gray-100 px-2 py-0.5 rounded-ios text-ios-gray-500 uppercase tracking-tight">PRO</div>
@@ -2353,16 +2362,15 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         </div>
       </header>
 
-      {/* Main Content Area: 三栏可拖拽调整宽度 */}
-      <div className="flex-1 flex overflow-hidden min-w-0">
+      {/* Main Content Area: Three columns draggable width adjustment */}      <div className="flex-1 flex overflow-hidden min-w-0">
         {/* Left Sidebar: Sources */}
         <aside
-          className="bg-ios-gray-50 border-r border-ios-gray-100/60 flex flex-col p-4 shrink-0 overflow-hidden"
+          className="bg-[var(--surface-low)] border-r border-[var(--border)] flex flex-col p-5 shrink-0 overflow-hidden"
           style={{ width: leftPanelWidth, minWidth: 160, maxWidth: 480 }}
         >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-ios-gray-700">来源 ({sourceListCount})</h2>
-            <button className="p-1 hover:bg-ios-gray-200 rounded-ios">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Sources ({sourceListCount})</h2>
+            <button className="p-1.5 hover:bg-[var(--surface-high)] rounded-lg transition-colors text-[var(--text-secondary)]">
               <MoreVertical size={16} />
             </button>
           </div>
@@ -2372,19 +2380,19 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               whileTap={{ scale: 0.95 }}
               type="button"
               onClick={() => setShowIntroduceModal(true)}
-              className={`w-full flex items-center justify-center gap-2 py-3.5 px-4 border rounded-2xl text-sm font-semibold transition-all ${
+              className={`w-full flex items-center justify-center gap-2 py-4 px-4 border rounded-2xl text-sm font-bold transition-all shadow-sm ${
                 fileUploading
-                  ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-ios-sm'
-                  : 'border-ios-gray-200 bg-white text-ios-gray-700 hover:shadow-ios-sm hover:bg-ios-gray-50'
+                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                  : 'border-[var(--border)] bg-[var(--surface-high)] text-[var(--text-primary)] hover:border-[var(--accent)] hover:shadow-md'
               }`}
             >
               {fileUploading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-              {fileUploading ? '添加来源中...' : '添加来源'}
+              {fileUploading ? 'Processing...' : 'Add Sources'}
             </motion.button>
             <p className="mt-2 px-1 text-xs text-ios-gray-500">
               {processingUploadCount > 0
-                ? `正在处理 ${processingUploadCount} 个文件，完成后会自动加入来源列表`
-                : '上传文件、网页或粘贴文本到当前笔记本'}
+                ? `Processing ${processingUploadCount} files, will be automatically added to sources list on completion`
+                : 'Upload files, website URLs or paste text to current notebook'}
             </p>
           </div>
 
@@ -2392,13 +2400,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             <div className="mb-3 px-3 py-2.5 bg-red-50 border border-red-100 rounded-lg space-y-1.5">
               <p className="text-xs text-red-700 line-clamp-2">{retrievalError}</p>
               <div className="flex items-center gap-2 flex-wrap">
-                {(retrievalError.includes('API') || retrievalError.includes('配置') || retrievalError.includes('生成向量失败')) && (
+                {(retrievalError.includes('API') || retrievalError.includes('Configuration') || retrievalError.includes('Failed to generate vector')) && (
                   <button
                     type="button"
                     onClick={() => { setRetrievalError(''); setShowSettingsModal(true); }}
                     className="text-xs font-medium text-red-600 hover:text-red-800 underline"
                   >
-                    去设置
+                    Go to Settings
                   </button>
                 )}
                 <button
@@ -2406,7 +2414,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   onClick={() => setRetrievalError('')}
                   className="text-xs text-red-500 hover:text-red-700"
                 >
-                  关闭
+                  Close
                 </button>
               </div>
             </div>
@@ -2416,7 +2424,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             <>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-ios-gray-500 uppercase tracking-wider">
-                  {selectedIds.size > 0 ? `已选 ${selectedIds.size} 个` : '全部来源'}
+                  {selectedIds.size > 0 ? `Selected ${selectedIds.size} ` : 'All Sources'}
                 </span>
                 <input
                   type="checkbox"
@@ -2435,7 +2443,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               <div className="flex-1 overflow-y-auto min-h-0">
                 {sourceListCount === 0 ? (
                   <div className="text-center py-8 text-ios-gray-400 text-sm">
-                    暂无来源，请添加
+                    No sources yet, please add one
                   </div>
                 ) : (
                   <>
@@ -2445,32 +2453,32 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: itemIdx * 0.03, type: 'spring', stiffness: 300, damping: 25 }}
-                        className={`flex items-center gap-3 p-3 border rounded-ios-xl mb-2 transition-all ${
+                        className={`flex items-center gap-3 p-3 border rounded-xl mb-2 transition-all ${
                           item.status === 'error'
-                            ? 'bg-red-50 border-red-200'
-                            : 'bg-white border-blue-100 shadow-[0_8px_24px_rgba(59,130,246,0.08)]'
+                            ? 'bg-red-50 border-red-200 dark:bg-red-900/20'
+                            : 'bg-[var(--surface-high)] border-[var(--border)] shadow-sm'
                         }`}
                       >
-                        <div className={`w-8 h-8 rounded-ios flex items-center justify-center shrink-0 ${
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
                           item.status === 'error'
                             ? 'bg-red-100 text-red-600'
-                            : 'bg-blue-50 text-blue-600'
+                            : 'bg-amber-100 text-amber-600 dark:bg-amber-900/40'
                         }`}>
                           {item.status === 'error'
                             ? <X size={16} />
                             : <Loader2 size={16} className="animate-spin" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-ios-gray-700 line-clamp-2 leading-tight">
+                          <div className="text-xs font-bold text-[var(--text-primary)] line-clamp-1 leading-tight">
                             {item.name}
                           </div>
                           <div className="mt-1 flex items-center gap-2">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-tighter ${
                               item.status === 'error'
                                 ? 'bg-red-100 text-red-700'
-                                : 'bg-blue-50 text-blue-700'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300'
                             }`}>
-                              {item.status === 'error' ? '处理失败' : '处理中'}
+                              {item.status === 'error' ? 'Failed' : 'Analysing'}
                             </span>
                             {item.message && (
                               <span className="text-[10px] text-red-600 truncate" title={item.message}>
@@ -2482,10 +2490,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         {item.status === 'error' && (
                           <button
                             type="button"
-                            onClick={() => removePendingSource(item.id)}
+                            onClick={() => setEditingNote(outputFeed.find((o: any) => o.id === item.id))}
                             className="text-xs text-red-600 hover:text-red-800 shrink-0"
                           >
-                            移除
+                            Remove
                           </button>
                         )}
                       </motion.div>
@@ -2497,27 +2505,27 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: (pendingSources.length + fileIdx) * 0.03, type: 'spring', stiffness: 300, damping: 25 }}
-                        className="flex items-center gap-3 p-3 bg-white border border-ios-gray-100 rounded-ios-xl mb-2 hover:shadow-ios-sm transition-all cursor-pointer"
+                        className="flex items-center gap-3 p-3 bg-[var(--surface-high)] border border-[var(--border)] rounded-xl mb-3 hover:shadow-md hover:border-[var(--accent)]/50 transition-all cursor-pointer group"
                         onClick={() => openSourceDetail(file)}
                       >
-                        <div className="w-8 h-8 bg-gradient-to-br from-primary/15 to-blue-100 rounded-ios flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-primary">{pendingSources.length + fileIdx + 1}</span>
+                        <div className="w-9 h-9 bg-[var(--surface-low)] border border-[var(--border)] rounded-lg flex items-center justify-center shrink-0 group-hover:bg-[var(--accent)] group-hover:text-white transition-colors">
+                          <span className="text-xs font-bold">{pendingSources.length + fileIdx + 1}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-ios-gray-700 line-clamp-2 leading-tight">
+                          <div className="text-xs font-bold text-[var(--text-primary)] line-clamp-2 leading-snug">
                             {file.name}
                           </div>
-                          <div className="mt-1 flex items-center gap-2">
+                          <div className="mt-1.5 flex items-center gap-2">
                             {(file.isEmbedded || file.kbFileId || vectorStatusByPath[getOutputsPath(file.url)] === 'embedded' || vectorFiles.some((v: any) => getOutputsPath(v?.original_path) === getOutputsPath(file.url))) && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-600">
-                                已入库
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 uppercase tracking-tighter">
+                                Indexed
                               </span>
                             )}
                           </div>
                         </div>
                         <input
                           type="checkbox"
-                          className="rounded-full text-primary accent-primary"
+                          className="w-4 h-4 rounded-full text-[var(--accent)] accent-[var(--accent)] border-[var(--border)] cursor-pointer"
                           checked={selectedIds.has(file.id)}
                           onChange={() => {
                             setSelectedIds(prev => {
@@ -2543,7 +2551,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 mb-2"
               >
                 <ChevronLeft size={18} />
-                返回
+                Back
               </button>
               <div className="text-xs font-medium text-gray-700 truncate mb-1" title={sourceDetailView.name}>
                 {sourceDetailView.name}
@@ -2553,9 +2561,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   href={sourceDetailView.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline mb-2 block truncate"
+                  className="text-primary hover:text-primary-dark text-sm flex items-center gap-1"
+                  title="Open in new tab"
                 >
-                  可在新标签页打开
+                  <Globe size={14} />
+                  <span>Open in new tab</span>
                 </a>
               )}
               <div className="flex-1 min-h-0 overflow-y-auto bg-white border border-gray-200 rounded-xl p-3">
@@ -2566,7 +2576,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
-                        引用 [{sourceDetailCitationFocus.sourceNumber}]
+                        Citation [{sourceDetailCitationFocus.sourceNumber}]
                       </span>
                       {typeof sourceDetailCitationFocus.chunkIndex === 'number' && (
                         <span className="text-[11px] text-blue-600">
@@ -2587,7 +2597,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 {sourceDetailLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 size={24} className="animate-spin text-blue-500" />
-                    <span className="ml-2 text-sm text-gray-500">解析中…</span>
+                    <span className="ml-2 text-sm text-gray-500">Parsing…</span>
                   </div>
                 ) : sourceDetailFormat === 'markdown' && sourceDetailContent ? (
                   <div className="prose prose-sm max-w-none text-gray-700 prose-p:text-xs prose-headings:text-sm prose-pre:text-xs">
@@ -2595,7 +2605,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   </div>
                 ) : (
                   <pre className="whitespace-pre-wrap text-xs text-gray-700 font-sans leading-relaxed break-words">
-                    {sourceDetailContent || '[无内容]'}
+                    {sourceDetailContent || '[No content]'}
                   </pre>
                 )}
               </div>
@@ -2603,18 +2613,18 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           )}
         </aside>
 
-        {/* 左-中 拖拽条 */}
+        {/* Left-to-middle drag bar */}
         <div
           role="separator"
           aria-orientation="vertical"
-          className="w-1 shrink-0 bg-ios-gray-100/60 hover:bg-primary/40 active:bg-primary cursor-col-resize transition-colors flex items-center justify-center group"
+          className="w-1.5 shrink-0 bg-[var(--border)] hover:bg-[var(--accent)] active:bg-[var(--accent)] cursor-col-resize transition-colors flex items-center justify-center group z-10"
           onMouseDown={(e) => {
             e.preventDefault();
             setResizing('left');
             resizeRef.current = { startX: e.clientX, startLeft: leftPanelWidth, startRight: rightPanelWidth };
           }}
         >
-          <span className="w-0.5 h-8 bg-ios-gray-300 group-hover:bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          <span className="w-0.5 h-8 bg-[var(--accent)] rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
         </div>
 
         {/* Center: Chat/Content Area */}
@@ -2647,27 +2657,27 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             />
           </div>
         ) : (
-        <main className="flex-1 flex flex-col relative bg-white min-w-[300px] overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-3 border-b border-ios-gray-100 shrink-0">
-            <span className="text-sm font-medium text-ios-gray-900">对话</span>
+        <main className="flex-1 flex flex-col relative bg-[var(--surface)] min-w-[300px] overflow-hidden transition-colors">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0 bg-[var(--surface-low)]">
+            <span className="text-sm font-bold text-[var(--text-primary)]">AI Workspace</span>
             <div className="flex items-center gap-2">
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 type="button"
                 onClick={handleNewConversation}
-                className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-ios-gray-100 rounded-ios text-sm font-medium text-ios-gray-700 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 hover:bg-[var(--surface-high)] rounded-xl text-sm font-bold text-[var(--text-secondary)] transition-all border border-[var(--border)]"
               >
                 <Plus size={16} />
-                新的对话
+                New chat
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 type="button"
                 onClick={handleShowHistory}
-                className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-ios-gray-100 rounded-ios text-sm font-medium text-ios-gray-700 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 hover:bg-[var(--surface-high)] rounded-xl text-sm font-bold text-[var(--text-secondary)] transition-all border border-[var(--border)]"
               >
                 <MessageSquare size={16} />
-                对话历史
+                History
               </motion.button>
             </div>
           </div>
@@ -2676,18 +2686,18 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             {chatSubView === 'history' && (
               <div className="max-w-[800px] mx-auto w-full">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-500">对话历史（点击可回滚到该对话）</h3>
+                  <h3 className="text-sm font-semibold text-gray-500">Conversation History</h3>
                   <button
                     type="button"
                     onClick={() => setChatSubView('current')}
                     className="text-sm text-blue-600 hover:underline"
                   >
-                    返回当前对话
+                    Back to current chat
                   </button>
                 </div>
                 <ul className="space-y-2">
                   {conversationHistory.length === 0 ? (
-                    <li className="text-sm text-gray-400 py-4">暂无历史对话</li>
+                    <li className="text-sm text-gray-400 py-4">No history</li>
                   ) : (
                     conversationHistory.map(item => (
                       <li key={item.id}>
@@ -2698,7 +2708,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         >
                           <span className="text-sm font-medium text-gray-800 line-clamp-1">{item.title}</span>
                           <span className="text-xs text-gray-400 mt-1 block">
-                            {new Date(item.updatedAt).toLocaleString()} · {item.messages.length} 条消息
+                            {new Date(item.updatedAt).toLocaleString()} · {item.messages.length} messages
                           </span>
                         </button>
                       </li>
@@ -2715,14 +2725,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   </div>
                 )}
                 {chatMessages.map(msg => (
-                  <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 shadow-ios-sm ${
-                      msg.role === 'assistant' ? 'bg-gradient-to-br from-blue-100 to-blue-200 text-primary' : 'bg-gradient-to-br from-ios-gray-200 to-ios-gray-300 text-ios-gray-600'
+                  <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg ${
+                      msg.role === 'assistant' ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white' : 'bg-[var(--surface-high)] text-[var(--text-secondary)] border border-[var(--border)]'
                     }`}>
-                      {msg.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
+                      {msg.role === 'assistant' ? <Bot size={18} /> : <User size={18} />}
                     </div>
-                    <div className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed shadow-ios-sm ${
-                      msg.role === 'assistant' ? 'bg-ios-gray-50 text-ios-gray-700 rounded-2xl rounded-tl-md' : 'bg-primary text-white rounded-2xl rounded-tr-md'
+                    <div className={`max-w-[85%] px-5 py-3.5 text-sm leading-relaxed shadow-sm transition-colors ${
+                      msg.role === 'assistant' ? 'bg-[var(--surface-high)] text-[var(--text-primary)] rounded-2xl rounded-tl-md border border-[var(--border)]' : 'bg-[var(--accent)] text-white rounded-2xl rounded-tr-md font-medium'
                     }`}>
                       {msg.role === 'assistant' ? (
                         <MarkdownContent
@@ -2743,7 +2753,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       <Bot size={16} />
                     </div>
                     <div className="bg-ios-gray-50 rounded-2xl rounded-tl-md px-4 py-3 text-sm flex items-center gap-2 text-ios-gray-500 shadow-ios-sm">
-                      <Loader2 size={14} className="animate-spin" /> {chatLoadingStage}
+                      <Loader2 size={14} className="animate-spin" /> Generating...
                     </div>
                   </div>
                 )}
@@ -2753,25 +2763,25 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           </div>
 
           {chatSubView === 'current' && (
-            <div className="px-6 pb-6 shrink-0">
+            <div className="px-6 pb-8 shrink-0">
               <div className="max-w-[800px] mx-auto relative">
-                <div className="glass rounded-ios-xl border border-slate-200/85 bg-white/82 shadow-[0_14px_32px_rgba(15,23,42,0.08)] transition-all duration-200 focus-within:border-primary/70 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(59,130,246,0.12),0_18px_40px_rgba(37,99,235,0.16)]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-low)] shadow-2xl transition-all duration-300 group focus-within:border-[var(--accent)] focus-within:ring-4 focus-within:ring-[var(--accent)]/10">
                   <input
                     type="text"
                     value={inputMsg}
                     onChange={e => setInputMsg(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
-                    placeholder={selectedIds.size > 0 ? "开始输入..." : "请先选择文件..."}
+                    placeholder={selectedIds.size > 0 ? "Ask anything about your sources..." : "Please select files first..."}
                     disabled={selectedIds.size === 0}
-                    className="w-full bg-transparent rounded-ios-xl py-4 pl-6 pr-24 text-lg text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:opacity-50"
+                    className="w-full bg-transparent py-5 pl-7 pr-32 text-base text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none disabled:opacity-50 font-medium"
                   />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-medium">{selectedIds.size} 个来源</span>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                    <span className="hidden sm:inline text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest">{selectedIds.size} sources</span>
                     <motion.button
-                      whileTap={{ scale: 0.88 }}
+                      whileTap={{ scale: 0.92 }}
                       onClick={handleSendMessage}
                       disabled={!inputMsg.trim() || isChatLoading || selectedIds.size === 0}
-                      className="p-2 bg-primary text-white rounded-full hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-ios-sm"
+                      className="p-3 bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-dark)] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[var(--accent)]/30"
                     >
                       <Send size={20} />
                     </motion.button>
@@ -2779,14 +2789,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 </div>
               </div>
               <p className="text-center text-[10px] text-ios-gray-400 mt-4">
-                NotebookLM 提供的内容未必准确，因此请仔细核查回答内容。
+                NotebookLM may provide inaccurate information, so please verify the content.
               </p>
             </div>
           )}
         </main>
         )}
 
-        {/* 中-右 拖拽条 */}
+        {/* Middle-to-right drag bar */}
         {activeTool !== 'note' && (
         <>
         <div
@@ -2802,13 +2812,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           <span className="w-0.5 h-8 bg-ios-gray-300 group-hover:bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
         </div>
 
-        {/* Right Sidebar: Studio 功能卡片，每卡片「…」翻转进该卡片设置 */}
+        {/* Right Sidebar: Studio function cards */}
         <aside
-          className="border-l border-ios-gray-100/60 flex flex-col bg-white overflow-hidden shrink-0"
+          className="border-l border-[var(--border)] flex flex-col bg-[var(--surface-low)] overflow-hidden shrink-0 transition-colors"
           style={{ width: rightPanelWidth, minWidth: 200, maxWidth: 600 }}
         >
-          <div className="h-14 border-b border-ios-gray-100 flex items-center px-4 shrink-0">
-            <h2 className="font-semibold text-ios-gray-700">Studio</h2>
+          <div className="h-16 border-b border-[var(--border)] flex items-center px-6 shrink-0 bg-[var(--surface-low)]">
+            <h2 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Studio Workspace</h2>
           </div>
 
           {studioPanelView === 'settings' && studioSettingsTool ? (
@@ -2819,16 +2829,16 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 mb-4"
               >
                 <ChevronLeft size={18} />
-                返回
+                Back
               </button>
               <h3 className="text-sm font-semibold text-gray-800 mb-3">
-                {studioSettingsTool === 'ppt' && 'PPT 生成'}
-                {studioSettingsTool === 'mindmap' && '思维导图'}
-                {studioSettingsTool === 'drawio' && 'DrawIO 图表'}
-                {studioSettingsTool === 'podcast' && '知识播客'}
-                {studioSettingsTool === 'flashcard' && '闪卡'}
-                {studioSettingsTool === 'quiz' && '测验'}
-                {/* {studioSettingsTool === 'video' && '视频讲解'} */}
+                {studioSettingsTool === 'ppt' && 'PPT Generation'}
+                {studioSettingsTool === 'mindmap' && 'Mindmap'}
+                {studioSettingsTool === 'drawio' && 'DrawIO Diagram'}
+                {studioSettingsTool === 'podcast' && 'Knowledge Podcast'}
+                {studioSettingsTool === 'flashcard' && 'Flashcards'}
+                {studioSettingsTool === 'quiz' && 'Quiz'}
+                {/* {studioSettingsTool === 'video' && 'Video Explanation'} */}
               </h3>
               <div className="space-y-4">
                 {studioSettingsTool === 'ppt' && (() => {
@@ -2836,14 +2846,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   return (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">语言</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Language</label>
                         <select value={c.language || 'zh'} onChange={(e) => setStudioConfigForTool('ppt', { language: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="zh">中文</option>
+                          <option value="zh">Chinese</option>
                           <option value="en">English</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">生成页数</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Page count</label>
                         <input
                           type="number"
                           min={1}
@@ -2866,14 +2876,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           placeholder="1–50"
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                         />
-                        <p className="text-xs text-gray-400 mt-0.5">1–50 页，整数</p>
+                        <p className="text-xs text-gray-400 mt-0.5">1–50 pages</p>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM 模型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM Model</label>
                         <input type="text" value={c.llmModel || ''} onChange={(e) => setStudioConfigForTool('ppt', { llmModel: e.target.value })} placeholder="deepseek-v3.2" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">生图模型 (VLM)</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Image Model (VLM)</label>
                         <select value={c.genFigModel || 'gemini-2.5-flash-image'} onChange={(e) => setStudioConfigForTool('ppt', { genFigModel: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
                           <option value="gemini-2.5-flash-image">2.5 Pro</option>
                           <option value="gemini-3-pro-image-preview">3.0 Pro</option>
@@ -2881,17 +2891,17 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">风格预设</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Style Preset</label>
                         <select value={c.stylePreset || 'modern'} onChange={(e) => setStudioConfigForTool('ppt', { stylePreset: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="modern">现代简约</option>
-                          <option value="business">商务专业</option>
-                          <option value="academic">学术报告</option>
-                          <option value="creative">创意设计</option>
+                          <option value="modern">Modern</option>
+                          <option value="business">Business</option>
+                          <option value="academic">Academic</option>
+                          <option value="creative">Creative</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">风格化 Prompt（可选）</label>
-                        <textarea value={c.stylePrompt || ''} onChange={(e) => setStudioConfigForTool('ppt', { stylePrompt: e.target.value })} placeholder="留空用预设" rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none" />
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Style Prompt (Optional)</label>
+                        <textarea value={c.stylePrompt || ''} onChange={(e) => setStudioConfigForTool('ppt', { stylePrompt: e.target.value })} placeholder="Leave blank for default" rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none" />
                       </div>
                     </>
                   );
@@ -2901,13 +2911,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   return (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM 模型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM Model</label>
                         <input type="text" value={c.llmModel || ''} onChange={(e) => setStudioConfigForTool('mindmap', { llmModel: e.target.value })} placeholder="deepseek-v3.2" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">思维导图风格</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Mindmap Style</label>
                         <select value={c.mindmapStyle || 'default'} onChange={(e) => setStudioConfigForTool('mindmap', { mindmapStyle: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="default">默认</option>
+                          <option value="default">Default</option>
                         </select>
                       </div>
                     </>
@@ -2918,32 +2928,32 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   return (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM 模型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM Model</label>
                         <input type="text" value={c.llmModel || ''} onChange={(e) => setStudioConfigForTool('drawio', { llmModel: e.target.value })} placeholder="deepseek-v3.2" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">图表类型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Diagram Type</label>
                         <select value={c.diagramType || 'auto'} onChange={(e) => setStudioConfigForTool('drawio', { diagramType: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="auto">自动</option>
-                          <option value="flowchart">流程图</option>
-                          <option value="architecture">架构图</option>
-                          <option value="sequence">时序图</option>
-                          <option value="mindmap">思维导图</option>
-                          <option value="er">ER 图</option>
+                          <option value="auto">Auto</option>
+                          <option value="flowchart">Flowchart</option>
+                          <option value="architecture">Architecture</option>
+                          <option value="sequence">Sequence</option>
+                          <option value="mindmap">Mindmap</option>
+                          <option value="er">ER Diagram</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">图表风格</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Diagram Style</label>
                         <select value={c.diagramStyle || 'default'} onChange={(e) => setStudioConfigForTool('drawio', { diagramStyle: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="default">默认</option>
-                          <option value="minimal">简约</option>
-                          <option value="sketch">手绘</option>
+                          <option value="default">Default</option>
+                          <option value="minimal">Minimal</option>
+                          <option value="sketch">Sketch</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">语言</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Language</label>
                         <select value={c.language || 'zh'} onChange={(e) => setStudioConfigForTool('drawio', { language: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="zh">中文</option>
+                          <option value="zh">Chinese</option>
                           <option value="en">English</option>
                         </select>
                       </div>
@@ -2958,15 +2968,15 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   const podcastMode = c.podcastMode || 'monologue';
 
                   const qwenVoices = [
-                    { value: 'vivian', label: 'Vivian - 明亮年轻女声' },
-                    { value: 'serena', label: 'Serena - 温暖温柔女声' },
-                    { value: 'uncle_fu', label: 'Uncle Fu - 成熟低沉男声' },
-                    { value: 'dylan', label: 'Dylan - 清晰自然男声' },
-                    { value: 'eric', label: 'Eric - 活泼略沙哑男声' },
-                    { value: 'ryan', label: 'Ryan - 充满活力男声（英文）' },
-                    { value: 'aiden', label: 'Aiden - 阳光清晰男声（英文）' },
-                    { value: 'ono_anna', label: 'Ono Anna - 俏皮女声（日文）' },
-                    { value: 'sohee', label: 'Sohee - 温暖女声（韩文）' }
+                    { value: 'vivian', label: 'Vivian - Bright young female' },
+                    { value: 'serena', label: 'Serena - Warm gentle female' },
+                    { value: 'uncle_fu', label: 'Uncle Fu - Mature deep male' },
+                    { value: 'dylan', label: 'Dylan - Clear natural male' },
+                    { value: 'eric', label: 'Eric - Lively slightly raspy male' },
+                    { value: 'ryan', label: 'Ryan - Energetic male (English)' },
+                    { value: 'aiden', label: 'Aiden - Sunny clear male (English)' },
+                    { value: 'ono_anna', label: 'Ono Anna - Playful female (Japanese)' },
+                    { value: 'sohee', label: 'Sohee - Warm female (Korean)' }
                   ];
 
                   const geminiVoices = [
@@ -3001,11 +3011,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   return (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM 模型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM Model</label>
                         <input type="text" value={c.llmModel || 'deepseek-v3.2'} onChange={(e) => setStudioConfigForTool('podcast', { llmModel: e.target.value })} placeholder="deepseek-v3.2" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">TTS 类型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">TTS Type</label>
                         <select
                           value={ttsType}
                           onChange={(e) => {
@@ -3024,25 +3034,25 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           }}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                         >
-                          <option value="qwen-tts-local">本地 Qwen TTS（仅单人）</option>
-                          <option value="gemini-tts-online">在线 Gemini TTS（需 apiyi 平台）</option>
+                          <option value="qwen-tts-local">Local Qwen TTS (Monologue only)</option>
+                          <option value="gemini-tts-online">Online Gemini TTS</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">播客模式</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Podcast Mode</label>
                         <select
                           value={podcastMode}
                           onChange={(e) => setStudioConfigForTool('podcast', { podcastMode: e.target.value })}
                           disabled={isQwen}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         >
-                          <option value="monologue">单人播客</option>
-                          <option value="dialog">双人对话</option>
+                          <option value="monologue">Monologue</option>
+                          <option value="dialog">Dialog</option>
                         </select>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1">
-                          {podcastMode === 'dialog' ? '说话人 A 音色' : '说话人音色'}
+                          {podcastMode === 'dialog' ? 'Speaker A Voice' : 'Speaker Voice'}
                         </label>
                         <select
                           value={c.voiceName || defaultVoice}
@@ -3054,7 +3064,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       </div>
                       {podcastMode === 'dialog' && isGemini && (
                         <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">说话人 B 音色</label>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Speaker B Voice</label>
                           <select
                             value={c.voiceNameB || defaultVoiceB}
                             onChange={(e) => setStudioConfigForTool('podcast', { voiceNameB: e.target.value })}
@@ -3065,9 +3075,9 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         </div>
                       )}
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">播客语言</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Podcast Language</label>
                         <select value={c.podcastLanguage || 'zh'} onChange={(e) => setStudioConfigForTool('podcast', { podcastLanguage: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="zh">中文</option>
+                          <option value="zh">Chinese</option>
                           <option value="en">English</option>
                         </select>
                       </div>
@@ -3079,14 +3089,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   return (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">语言</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Language</label>
                         <select value={c.language || 'zh'} onChange={(e) => setStudioConfigForTool('flashcard', { language: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="zh">中文</option>
+                          <option value="zh">Chinese</option>
                           <option value="en">English</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">卡片数量</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Card count</label>
                         <input
                           type="number"
                           min={5}
@@ -3105,10 +3115,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           placeholder="5–50"
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                         />
-                        <p className="text-xs text-gray-400 mt-0.5">5–50 张卡片</p>
+                        <p className="text-xs text-gray-400 mt-0.5">5–50 cards</p>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM 模型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM Model</label>
                         <input type="text" value={c.llmModel || ''} onChange={(e) => setStudioConfigForTool('flashcard', { llmModel: e.target.value })} placeholder="deepseek-v3.2" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                       </div>
                     </>
@@ -3119,14 +3129,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   return (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">语言</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Language</label>
                         <select value={c.language || 'zh'} onChange={(e) => setStudioConfigForTool('quiz', { language: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                          <option value="zh">中文</option>
+                          <option value="zh">Chinese</option>
                           <option value="en">English</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">题目数量</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Question count</label>
                         <input
                           type="number"
                           min={5}
@@ -3145,21 +3155,21 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           placeholder="5–30"
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                         />
-                        <p className="text-xs text-gray-400 mt-0.5">5–30 道题</p>
+                        <p className="text-xs text-gray-400 mt-0.5">5–30 questions</p>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM 模型</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">LLM Model</label>
                         <input type="text" value={c.llmModel || ''} onChange={(e) => setStudioConfigForTool('quiz', { llmModel: e.target.value })} placeholder="deepseek-v3.2" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                       </div>
                     </>
                   );
                 })()}
-                {/* 视频讲解暂未开放
+                {/* Video description not yet available
                 {studioSettingsTool === 'video' && (() => {
                   const c = getStudioConfig('video');
                   return (
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">LLM 模型</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">LLM Model</label>
                       <input type="text" value={c.llmModel || ''} onChange={(e) => setStudioConfigForTool('video', { llmModel: e.target.value })} placeholder="deepseek-v3.2" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
                     </div>
                   );
@@ -3167,7 +3177,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 */}
               </div>
               <button type="button" onClick={() => { setStudioPanelView('tools'); setStudioSettingsTool(null); }} className="mt-4 w-full py-2.5 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600">
-                保存并返回
+                Save and return
               </button>
             </div>
           ) : (
@@ -3194,7 +3204,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setStudioSettingsTool(tool.id as StudioToolId); setStudioPanelView('settings'); }}
                     className="absolute top-2 right-2 min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-ios-gray-200 rounded-ios transition-colors"
-                    title="该功能设置"
+                    title="Settings"
                   >
                     <MoreVertical size={16} className="text-ios-gray-500" />
                   </motion.button>
@@ -3212,12 +3222,12 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 {toolLoading ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    生成中…
+                    Generating...
                   </>
                 ) : (
                   <>
                     <Sparkles size={16} />
-                    生成
+                    Generate
                   </>
                 )}
               </motion.button>
@@ -3231,22 +3241,22 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   <Zap size={12} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-500" />
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-800">正在生成中...</p>
-                  <p className="text-xs text-gray-500 mt-1">基于 {selectedIds.size} 个来源</p>
+                  <p className="text-sm font-medium text-gray-800">Generating...</p>
+                  <p className="text-xs text-gray-500 mt-1">Based on {selectedIds.size} sources</p>
                 </div>
               </div>
             )}
 
             {toolOutput && activeTool === 'mindmap' && toolOutput.mindmap_code && (
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <MermaidPreview mermaidCode={toolOutput.mindmap_code} title="思维导图" />
+                <MermaidPreview mermaidCode={toolOutput.mindmap_code} title="Mindmap" />
               </div>
             )}
 
             {toolOutput && activeTool === 'ppt' && (
               <div className="bg-green-50/30 p-4 rounded-2xl border border-green-100/50">
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-800 mb-2">PPT 生成完成</p>
+                  <p className="text-sm font-medium text-gray-800 mb-2">PPT Generated</p>
                 {getPptDownloadUrl(toolOutput) && (
                     <a 
                       href={getPptDownloadUrl(toolOutput)} 
@@ -3255,7 +3265,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
                     >
                       <FileText size={16} />
-                      下载 PPT
+                      Download PPT
                     </a>
                   )}
                 </div>
@@ -3265,7 +3275,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             {toolOutput && activeTool === 'podcast' && (
               <div className="bg-purple-50/30 p-4 rounded-2xl border border-purple-100/50">
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-800 mb-2">播客生成完成</p>
+                  <p className="text-sm font-medium text-gray-800 mb-2">Podcast Generated</p>
                   {(toolOutput.audio_path || toolOutput.audio_url) && (
                     <audio controls className="w-full mt-3" src={toolOutput.audio_path || toolOutput.audio_url} />
                   )}
@@ -3275,7 +3285,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
             {toolOutput && activeTool === 'drawio' && toolOutput.xml_content && (
               <div className="bg-teal-50/30 p-4 rounded-2xl border border-teal-100/50">
-                <p className="text-sm font-medium text-gray-800">DrawIO 图表已生成，已加入下方产出内容，点击可预览。</p>
+                <p className="text-sm font-medium text-gray-800">Diagram generated, added to output feed.</p>
                 {toolOutput.file_path && (
                   <a
                     href={toolOutput.file_path}
@@ -3284,7 +3294,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                     className="inline-flex items-center gap-2 mt-2 text-sm text-teal-600 hover:text-teal-700"
                   >
                     <FileText size={14} />
-                    下载 .drawio
+                    Download .drawio
                   </a>
                 )}
               </div>
@@ -3295,8 +3305,8 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           {outputFeed.length > 0 && (
             <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-ios-gray-700">产出内容</h3>
-                <span className="text-xs text-ios-gray-400">最近 {outputFeed.length} 条</span>
+                <h3 className="text-sm font-semibold text-ios-gray-700">Output Feed</h3>
+                <span className="text-xs text-ios-gray-400">Recent {outputFeed.length}</span>
               </div>
               <div className="space-y-3">
                 {outputFeed.map((item, feedIdx) => (
@@ -3325,7 +3335,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       <div className="text-[10px] text-ios-gray-400">{item.createdAt}</div>
                     </div>
                     <div className="mt-1 text-xs text-ios-gray-500 line-clamp-1">
-                      来源：{item.sources}
+                      Sources: {item.sources}
                     </div>
                     <div className="mt-2 flex items-center gap-2">
                       {(item.type === 'flashcard' || item.type === 'quiz') ? (
@@ -3337,7 +3347,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           disabled={loadingSetId === item.id}
                           className="text-xs px-2.5 py-1 rounded-full bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors disabled:opacity-50"
                         >
-                          {loadingSetId === item.id ? '加载中...' : item.type === 'flashcard' ? '学习' : '做测验'}
+                          {loadingSetId === item.id ? 'Loading...' : item.type === 'flashcard' ? 'Study' : 'Take Quiz'}
                         </button>
                       ) : item.type === 'note' && item.url ? (
                         <>
@@ -3345,7 +3355,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                             onClick={async (e) => {
                               e.stopPropagation();
                               try {
-                                const res = await fetch(item.url);
+                                const res = await fetch(item.url || '');
                                 const markdown = await res.text();
                                 const lines = markdown.split('\n').filter(l => l.trim());
                                 const titleLine = lines.find(l => l.startsWith('# '));
@@ -3385,7 +3395,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                             }}
                             className="text-xs px-2.5 py-1 rounded-full bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
                           >
-                            预览
+                            Preview
                           </button>
                           <a
                             href={item.url}
@@ -3394,11 +3404,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                             onClick={(e) => e.stopPropagation()}
                             className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                           >
-                            下载
+                            Download
                           </a>
                         </>
                       ) : (
-                        <span className="text-xs text-ios-gray-400">暂无下载链接</span>
+                        <span className="text-xs text-ios-gray-400">No download link</span>
                       )}
                     </div>
                   </motion.div>
@@ -3409,11 +3419,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
           </div>
           )}
 
-          {/* 添加笔记 - 暂未使用，先注释
+          {/* Add note - currently unused, commented out for now
           <div className="p-4 border-t shrink-0">
             <button className="w-full flex items-center justify-center gap-2 py-3 bg-black text-white rounded-full text-sm font-medium hover:bg-gray-800 transition-colors shadow-lg">
               <Plus size={18} />
-              添加笔记
+              Add Note
             </button>
           </div>
           */}
@@ -3422,13 +3432,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         )}
       </div>
 
-      {/* API 设置弹窗 */}
+      {/* API Settings Dialog */}
       <SettingsModal
         open={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
       />
 
-      {/* 引入弹框：根据以下内容生成音频概览和视频概览 */}
+      {/* Import Dialog: generate audio overview and video overview from the following content */}
       {showIntroduceModal && (
         <div
           className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center"
@@ -3458,7 +3468,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             </div>
             <div className="flex items-center justify-between px-6 py-4 border-b border-ios-gray-100 shrink-0">
               <h2 className="text-base font-semibold text-ios-gray-900 text-center flex-1">
-                添加来源：上传文件、粘贴网址或文本
+                Add source: Upload files, paste URL or text
               </h2>
               <button
                 type="button"
@@ -3475,27 +3485,27 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              {/* 搜索与 API 统一在「设置」中配置，此处仅展示当前来源并跳转 */}
+              {/* Search and API are unified in "Settings" configuration, here only display current source and jump */}
               {(() => {
                 const s = getApiSettings(effectiveUser?.id || null);
                 const prov = (s?.searchProvider as string) || 'serper';
                 const eng = (s?.searchEngine as string) || 'google';
-                const label = prov === 'serper' ? 'Serper (Google)' : prov === 'bocha' ? '博查' : `SerpAPI (${eng === 'baidu' ? '百度' : 'Google'})`;
+                const label = prov === 'serper' ? 'Serper (Google)' : prov === 'bocha' ? 'Bocha' : `SerpAPI (${eng === 'baidu' ? 'Baidu' : 'Google'})`;
                 return (
                   <div className="flex items-center justify-between gap-2 py-1.5 px-3 rounded-lg bg-gray-50 border border-gray-100">
-                    <span className="text-xs text-gray-600">当前搜索来源：{label}</span>
+                    <span className="text-xs text-gray-600">Search provider: {label}</span>
                     <button
                       type="button"
                       onClick={() => { setShowIntroduceModal(false); setShowSettingsModal(true); }}
                       className="text-xs font-medium text-blue-600 hover:text-blue-800"
                     >
-                      去设置
+                      Settings
                     </button>
                   </div>
                 );
               })()}
 
-              {/* 两个选项：Search 引入 | Deep Research */}
+              {/* Two options: Search Import | Deep Research */}
               <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
                 <button
                   type="button"
@@ -3504,7 +3514,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                     introduceOption === 'search' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
                   }`}
                 >
-                  Search 引入
+                  Search
                 </button>
                 <button
                   type="button"
@@ -3526,7 +3536,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         type="text"
                         value={fastResearchQuery}
                         onChange={e => { setFastResearchQuery(e.target.value); setFastResearchError(''); }}
-                        placeholder="输入查询，如：强化学习的最新进展"
+                        placeholder="Enter query, e.g., Latest progress in RL"
                         className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400"
                       />
                     </div>
@@ -3536,14 +3546,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       disabled={fastResearchLoading || !fastResearchQuery.trim()}
                       className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 shrink-0"
                     >
-                      {fastResearchLoading ? <Loader2 size={20} className="animate-spin" /> : <ChevronRight size={20} />}
+                      {fastResearchLoading ? 'Searching...' : <ChevronRight size={20} />}
                     </button>
                   </div>
-                  {fastResearchLoading && <p className="text-xs text-gray-500">正在发现其他来源…</p>}
+                  {fastResearchLoading && <p className="text-xs text-gray-500">Discovering sources...</p>}
                   {fastResearchError && <p className="text-xs text-red-500">{fastResearchError}</p>}
                   {fastResearchSources.length > 0 && (
                     <div className="space-y-3 pt-1">
-                      <p className="text-sm font-medium text-green-700">Fast Research 已完成！</p>
+                      <p className="text-sm font-medium text-green-700">Fast Research complete!</p>
                       <div className="space-y-2 max-h-[200px] overflow-y-auto">
                         {fastResearchSources.map((s, i) => (
                           <div key={i} className="flex items-start gap-2 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
@@ -3572,7 +3582,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                             onChange={e => setFastResearchSelected(e.target.checked ? new Set(fastResearchSources.map((_, i) => i)) : new Set())}
                             className="rounded text-blue-500"
                           />
-                          选择所有来源
+                          Select all
                         </label>
                         <button
                           type="button"
@@ -3580,8 +3590,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           disabled={importingSources || fastResearchSelected.size === 0}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                         >
-                          {importingSources ? <Loader2 size={14} className="animate-spin" /> : null}
-                          + 导入
+                          {importingSources ? 'Importing...' : 'Import selected'}
                         </button>
                       </div>
                     </div>
@@ -3592,7 +3601,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   {deepResearchSuccess ? (
                     <div className="rounded-xl bg-green-50 border border-green-200 p-5 text-center space-y-4">
                       <p className="text-sm font-medium text-green-800">
-                        《{deepResearchSuccess.topic}》报告已生成，已加入来源。
+                        Report "{deepResearchSuccess.topic}" generated and added.
                       </p>
                       <div className="flex items-center justify-center gap-3 flex-wrap">
                         {deepResearchSuccess.pdfUrl && (
@@ -3603,7 +3612,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
                           >
                             <Download size={16} />
-                            下载报告
+                            Download
                           </a>
                         )}
                         <button
@@ -3611,19 +3620,19 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           onClick={() => { setDeepResearchSuccess(null); setShowIntroduceModal(false); }}
                           className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
                         >
-                          好的
+                          OK
                         </button>
                       </div>
                     </div>
                   ) : (
                     <>
-                      <p className="text-sm text-gray-600">根据主题搜索并生成 PDF 报告，自动加入来源。</p>
+                      <p className="text-sm text-gray-600">Enter a topic above to search the web for related sources.</p>
                       <div className="flex gap-2">
                         <input
                           type="text"
                           value={deepResearchTopic}
                           onChange={e => { setDeepResearchTopic(e.target.value); setDeepResearchError(''); }}
-                          placeholder="输入研究主题，生成报告并加入来源"
+                          placeholder="Enter research topic..."
                           className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500"
                         />
                         <button
@@ -3632,8 +3641,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                           disabled={deepResearchLoading || !deepResearchTopic.trim()}
                           className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 disabled:opacity-50 shrink-0 flex items-center gap-2"
                         >
-                          {deepResearchLoading ? <Loader2 size={16} className="animate-spin" /> : null}
-                          生成报告
+                          {deepResearchLoading ? 'Generating...' : 'Generate report'}
                         </button>
                       </div>
                       {deepResearchError && <p className="text-xs text-red-500">{deepResearchError}</p>}
@@ -3642,11 +3650,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                 </div>
               )}
 
-              {/* 三种引入方式：上传文件 / 网站 / 直接输入 */}
+              {/* Three import methods: Upload file / Website / Direct input */}
               <div className="border-t border-gray-100 pt-5 space-y-4">
-                {/* 1. 上传文件：点击即选文件 */}
+                {/* 1. Upload file: click to select file */}
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">上传文件</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">Upload files</p>
                   <label
                     className={`flex flex-col items-center justify-center gap-3 w-full min-h-[148px] py-5 px-4 rounded-2xl border-2 border-dashed transition-colors ${
                       fileUploading
@@ -3666,10 +3674,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-semibold text-gray-800">
-                        {fileUploading ? '文件处理中，来源列表会实时更新' : '点击选择，或拖入一个或多个文件'}
+                        {fileUploading ? 'Processing...' : 'Click or drag files here'}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
-                        支持一次添加多个文件，上传后会立刻出现在左侧来源列表
+                        Supports multiple files
                       </p>
                     </div>
                     <input
@@ -3685,12 +3693,12 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       }}
                     />
                   </label>
-                  <p className="text-xs text-gray-400 mt-1">PDF、图片、文档、音频等</p>
+                  <p className="text-ios-gray-400 text-xs mt-2">Upload PDFs or text files to get started.</p>
                 </div>
 
-                {/* 2. 网站：输入 URL，抓取网页正文后引入 */}
+                {/* 2. Website: input URL, crawl webpage body then import */}
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">网站</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">Website</p>
                   <div className="flex gap-2">
                     <input
                       type="url"
@@ -3705,35 +3713,33 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       disabled={introduceUrlLoading || !introduceUrl.trim()}
                       className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0 flex items-center gap-2"
                     >
-                      {introduceUrlLoading ? <Loader2 size={16} className="animate-spin" /> : <Link2 size={16} />}
-                      抓取并引入
+                      {introduceUrlLoading ? 'Parsing...' : 'Parse URL'}
                     </button>
                   </div>
                   {introduceUrlError && <p className="text-xs text-red-500 mt-1">{introduceUrlError}</p>}
                   {introduceUrlSuccess && <p className="text-xs text-green-600 mt-1">{introduceUrlSuccess}</p>}
-                  <p className="text-xs text-gray-400 mt-1">抓取网页正文（自动去除 HTML 标签）后加入来源</p>
+                  <p className="text-xs text-gray-400 mt-1">Extracts text from URL</p>
                 </div>
 
-                {/* 3. 直接输入：文本框粘贴文字 */}
+                {/* 3. Direct input: paste text in textbox */}
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">直接输入</p>
+                  <p className="text-xs font-medium text-gray-600 mb-2">Paste text</p>
                   <textarea
                     value={introduceText}
                     onChange={(e) => { setIntroduceText(e.target.value); setIntroduceTextError(''); setIntroduceTextSuccess(''); }}
-                    placeholder="粘贴或输入文字…"
+                    placeholder="Paste text here..."
                     rows={4}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
                   <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-gray-400">将作为 .md 来源加入笔记本</span>
+                    <span className="text-xs text-gray-400">Added as .md source</span>
                     <button
                       type="button"
                       onClick={handleAddTextSource}
                       disabled={introduceTextLoading || !introduceText.trim()}
                       className="px-4 py-2 rounded-xl bg-gray-800 text-white text-sm font-medium hover:bg-gray-900 disabled:opacity-50 flex items-center gap-2"
                     >
-                      {introduceTextLoading ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
-                      添加为来源
+                      {introduceTextLoading ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                   {introduceTextError && <p className="text-xs text-red-500 mt-1">{introduceTextError}</p>}
@@ -3745,7 +3751,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         </div>
       )}
 
-      {/* 产出预览抽屉 */}
+      {/* Output preview drawer */}
       {previewOutput && (
         <div
           className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
@@ -3773,7 +3779,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
             <div className="flex items-center justify-between px-4 py-3 border-b border-ios-gray-100 bg-white shrink-0">
               <div>
                 <h2 className="text-lg font-semibold text-ios-gray-800">{previewOutput.title}</h2>
-                <p className="text-xs text-ios-gray-500 mt-1">来源：{previewOutput.sources}</p>
+                <p className="text-xs text-ios-gray-500 mt-1">Sources: {previewOutput.sources}</p>
               </div>
               <div className="flex items-center gap-2">
                 {previewOutput.url && (
@@ -3783,7 +3789,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                     rel="noreferrer"
                     className="px-4 py-2 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-ios transition-colors"
                   >
-                    下载
+                    Download
                   </a>
                 )}
                 <motion.button
@@ -3796,7 +3802,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               </div>
             </div>
 
-            {/* Body：min-h-0 让 flex 子项可收缩，drawio 画布才能拉满 */}
+            {/* Body: min-h-0 lets flex children shrink so drawio canvas can fill */}
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               {previewOutput.type === 'ppt' && (
                 <div className="h-full w-full flex flex-col">
@@ -3806,7 +3812,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                     if (!sameOriginPdf) {
                       return (
                         <div className="flex-1 flex flex-col items-center justify-center gap-4 text-gray-500 p-6">
-                          <p>暂无 PDF 预览，请点击下方下载查看。</p>
+                          <p>No PDF preview available, please click button below to download and view.</p>
                           {previewOutput.url && (
                             <a
                               href={getSameOriginUrl(previewOutput.url)}
@@ -3814,7 +3820,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                               rel="noreferrer"
                               className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
                             >
-                              下载文件
+                              Download File
                             </a>
                           )}
                         </div>
@@ -3827,14 +3833,14 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         className="w-full flex-1 min-h-0"
                       >
                         <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-500">
-                          <p>PDF 预览加载失败</p>
+                          <p>PDF preview failed to load</p>
                           <a
                             href={sameOriginPdf}
                             target="_blank"
                             rel="noreferrer"
                             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
                           >
-                            在新标签页打开
+                            Open in New Tab
                           </a>
                         </div>
                       </object>
@@ -3851,7 +3857,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         <Mic2 className="text-white" size={32} />
                       </div>
                       <div>
-                        <h3 className="text-xl font-semibold text-gray-900">知识播客</h3>
+                        <h3 className="text-xl font-semibold text-gray-900">Podcast</h3>
                         <p className="text-sm text-gray-500">{previewOutput.createdAt}</p>
                       </div>
                     </div>
@@ -3861,10 +3867,10 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                       className="w-full"
                       src={previewOutput.url}
                     >
-                      您的浏览器不支持音频播放
+                      Your browser does not support audio playback.
                     </audio>
                     <p className="text-xs text-gray-400 mt-4 text-center">
-                      提示：可以下载音频文件到本地播放
+                      Tip: You can download the audio file to play locally.
                     </p>
                   </div>
                 </div>
@@ -3875,7 +3881,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                   <div className="w-full h-full bg-white rounded-xl shadow-lg p-6">
                     <MermaidPreview 
                       mermaidCode={previewOutput.mermaidCode} 
-                      title="思维导图预览" 
+                      title="Mindmap Preview" 
                     />
                   </div>
                 </div>
@@ -3892,11 +3898,11 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                     </div>
                   ) : previewLoading ? (
                     <div className="flex items-center justify-center flex-1 text-gray-500 text-sm">
-                      正在加载图表…
+                      Loading chart...
                     </div>
                   ) : (
                     <div className="p-4 text-center">
-                      <p className="text-sm text-gray-600 mb-3">无法内嵌加载，请下载后编辑。</p>
+                      <p className="text-sm text-gray-600 mb-3">Unable to embed, please download then edit.</p>
                       <a
                         href={previewOutput.url}
                         target="_blank"
@@ -3904,7 +3910,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
                         className="inline-flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 text-sm"
                       >
                         <FileText size={16} />
-                        下载 .drawio 文件
+                        Download .drawio file
                       </a>
                     </div>
                   )}
@@ -3912,13 +3918,13 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
               )}
               {previewOutput.type === 'mindmap' && !previewOutput.mermaidCode && (
                 <div className="flex items-center justify-center h-full text-gray-400">
-                  {previewLoading ? '正在加载思维导图内容...' : '暂无预览内容'}
+                  {previewLoading ? 'Loading mindmap content...' : 'No preview content'}
                 </div>
               )}
 
               {!previewOutput.url && !previewOutput.mermaidCode && previewOutput.type !== 'mindmap' && (
                 <div className="flex items-center justify-center h-full text-gray-400">
-                  暂无预览内容
+                  No preview content
                 </div>
               )}
             </div>

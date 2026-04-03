@@ -1,7 +1,7 @@
 """
-DeepResearch 模块
-阿里巴巴通义实验室的深度研究代理系统
-完整集成到 Open-NotebookLM
+DeepResearch Module
+Deep research agent system from Alibaba Qwen Laboratory
+Fully integrated into Open-NotebookLM
 """
 
 from .react_agent import MultiTurnReactAgent

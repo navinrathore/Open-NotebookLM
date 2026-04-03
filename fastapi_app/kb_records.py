@@ -15,7 +15,7 @@ except ImportError:
     log = logging.getLogger(__name__)
 
 def _get_notebook_dir(user_email: str, notebook_id: str) -> Optional[Path]:
-    """根据 user_email 和 notebook_id 查找笔记本目录"""
+    """Find the notebook directory based on user_email and notebook_id"""
     from workflow_engine.utils import get_project_root
     safe_email = user_email.replace("@", "_at_")
     user_dir = get_project_root() / "outputs" / safe_email
@@ -24,7 +24,7 @@ def _get_notebook_dir(user_email: str, notebook_id: str) -> Optional[Path]:
         log.warning(f"User dir not found: {user_dir}")
         return None
 
-    # 查找匹配的笔记本目录（目录名以 notebook_id 结尾）
+    # Find the matching notebook directory (directory name ends with notebook_id)
     for nb_dir in user_dir.iterdir():
         if nb_dir.is_dir() and nb_dir.name.endswith(notebook_id):
             log.info(f"Found notebook dir: {nb_dir}")

@@ -7,39 +7,46 @@ Frontend typically overrides these values, but they're kept for API compatibilit
 
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 
 class AppSettings(BaseSettings):
     """Application configuration with environment variable support."""
 
-    # API Configuration
-    DEFAULT_LLM_API_URL: str = "http://123.129.219.111:3000/v1/"
+    # API Configuration (Locked to Free/Local Stack)
+    DEFAULT_LLM_API_URL: str = "https://router.huggingface.co/v1"
+    # Using HF_TOKEN as the secondary fallback for DEFAULT_LLM_API_KEY
+    DEFAULT_LLM_API_KEY: str = ""
+    HF_TOKEN: str = ""
+    
+    DF_API_KEY: Optional[str] = None
+    DEFAULT_LANGUAGE: str = "en"
 
-    # Model defaults (used in schemas.py, typically overridden by frontend)
-    MODEL_GPT_4O: str = "deepseek-v3.2"
-    PAPER2VIDEO_DEFAULT_MODEL: str = "deepseek-v3.2"
+    # Model defaults (Locked to Meta-Llama-3-8B-Instruct for Free Tier)
+    MODEL_GPT_4O: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2VIDEO_DEFAULT_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
 
     # Paper2PPT models
-    PAPER2PPT_DEFAULT_MODEL: str = "deepseek-v3.2"
-    PAPER2PPT_OUTLINE_MODEL: str = "deepseek-v3.2"
-    PAPER2PPT_CONTENT_MODEL: str = "deepseek-v3.2"
+    PAPER2PPT_DEFAULT_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2PPT_OUTLINE_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2PPT_CONTENT_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
     PAPER2PPT_IMAGE_GEN_MODEL: str = "gemini-3-pro-image-preview"
     PAPER2PPT_VLM_MODEL: str = "qwen-vl-ocr-2025-11-20"
-    PAPER2PPT_CHART_MODEL: str = "deepseek-v3.2"
-    PAPER2PPT_DESC_MODEL: str = "deepseek-v3.2"
-    PAPER2PPT_TECHNICAL_MODEL: str = "deepseek-v3.2"
+    PAPER2PPT_CHART_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2PPT_DESC_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2PPT_TECHNICAL_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
 
     # Paper2Figure models
-    PAPER2FIGURE_TEXT_MODEL: str = "deepseek-v3.2"
+    PAPER2FIGURE_TEXT_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
     PAPER2FIGURE_IMAGE_MODEL: str = "gemini-3-pro-image-preview"
     PAPER2FIGURE_VLM_MODEL: str = "qwen-vl-ocr-2025-11-20"
-    PAPER2FIGURE_CHART_MODEL: str = "deepseek-v3.2"
-    PAPER2FIGURE_DESC_MODEL: str = "deepseek-v3.2"
-    PAPER2FIGURE_REF_IMG_DESC_MODEL: str = "deepseek-v3.2"
-    PAPER2FIGURE_TECHNICAL_MODEL: str = "deepseek-v3.2"
+    PAPER2FIGURE_CHART_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2FIGURE_DESC_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2FIGURE_REF_IMG_DESC_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    PAPER2FIGURE_TECHNICAL_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
 
     # Knowledge Base
-    KB_CHAT_MODEL: str = "deepseek-v3.2"
+    KB_CHAT_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
     SQLBOT_OPENAI_API_KEY: Optional[str] = None
     SQLBOT_OPENAI_API_BASE: Optional[str] = None
     SQLBOT_OPENAI_MODEL: Optional[str] = None
@@ -68,8 +75,9 @@ class AppSettings(BaseSettings):
     LOCAL_TTS_GPU_MEMORY_UTILIZATION: float = 0.3
 
     # Local Embedding
-    USE_LOCAL_EMBEDDING: int = 1
-    LOCAL_EMBEDDING_MODEL: str = "Octen/Octen-Embedding-0.6B"
+    USE_LOCAL_EMBEDDING: int = 0
+    USE_EMBEDDING_LIBRARY: int = 1
+    LOCAL_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     LOCAL_EMBEDDING_PORT: int = 26210
     LOCAL_EMBEDDING_CMD: str = "vllm"
     LOCAL_EMBEDDING_CUDA_VISIBLE_DEVICES: Optional[str] = None

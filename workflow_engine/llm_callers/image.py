@@ -16,12 +16,12 @@ log = get_logger(__name__)
 
 class VisionLLMCaller(BaseLLMCaller):
     """
-    视觉LLM调用器 - 统一入口
-    支持模式:
-    1. understanding       (通用图像理解)
-    2. generation / edit   (图像生成/编辑)
-    3. video_understanding (视频理解)
-    4. ocr                 (OCR专用)
+    Vision LLM Caller - Unified Entry
+    Supported modes:
+    1. understanding       (General image understanding)
+    2. generation / edit   (Image generation/editing)
+    3. video_understanding (Video understanding)
+    4. ocr                 (OCR specialized)
     """
     
     def __init__(self, 
@@ -30,12 +30,12 @@ class VisionLLMCaller(BaseLLMCaller):
                  **kwargs):
         """
         Args:
-            vlm_config: VLM配置，包含：
+            vlm_config: VLM configuration, including:
                 - mode: "generation" | "edit" | "understanding" | "video_understanding" | "ocr"
-                - input_image: 输入图像路径
-                - input_video: 输入视频路径 (video_understanding模式)
-                - output_image: 输出图像保存路径 (generation/edit模式)
-                - response_format: "image" | "text" (默认根据mode自动判断)
+                - input_image: Input image path
+                - input_video: Input video path (video_understanding mode)
+                - output_image: Output image save path (generation/edit mode)
+                - response_format: "image" | "text" (default automatically determined by mode)
         """
         super().__init__(state, **kwargs)
         self.vlm_config = vlm_config
@@ -44,28 +44,28 @@ class VisionLLMCaller(BaseLLMCaller):
         self.max_tokens = kwargs.get("max_tokens", 4096)
     
     async def call(self, messages: List[BaseMessage], bind_post_tools: bool = False) -> AIMessage:
-        """调用VLM"""
-        log.info(f"VisionLLM调用，模型: {self.model_name}, 模式: {self.mode}")
+        """Calls VLM"""
+        log.info(f"VisionLLM call, model: {self.model_name}, mode: {self.mode}")
         
-        # 1. 图像生成/编辑
+        # 1. Image generation/editing
         if self.mode in ["generation", "edit"]:
             return await self._call_image_output(messages)
             
-        # 2. 视频理解
+        # 2. Video understanding
         elif self.mode == "video_understanding":
              return await self._call_video_understanding(messages)
              
-        # 3. OCR (显式模式 或 隐式检测)
+        # 3. OCR (Explicit mode or implicit detection)
         elif self.mode == "ocr" or ("qwen-vl-ocr" in self.model_name.lower() and "apiyi" in self.state.request.chat_api_url):
              return await self._call_ocr(messages)
              
-        # 4. 通用图像理解 (默认)
+        # 4. General image understanding (Default)
         else:
             return await self._call_image_understanding(messages)
         
     async def _call_ocr(self, messages: List[BaseMessage]) -> AIMessage:
-        """调用 OCR 模块"""
-        # 转换 LangChain 消息为 list[dict]
+        """Calls OCR module"""
+        # Convert LangChain messages to list[dict]
         msgs = self._convert_messages(messages)
         image_path = self.vlm_config.get("input_image")
         
@@ -82,9 +82,9 @@ class VisionLLMCaller(BaseLLMCaller):
         return AIMessage(content=content)
 
     async def _call_video_understanding(self, messages: List[BaseMessage]) -> AIMessage:
-        """调用视频理解模块"""
+        """Calls video understanding module"""
         msgs = self._convert_messages(messages)
-        # 支持 input_video 或 input_image (兼容性)
+        # Supports input_video or input_image (compatibility)
         video_path = self.vlm_config.get("input_video") or self.vlm_config.get("input_image")
         
         if not video_path:
@@ -103,7 +103,7 @@ class VisionLLMCaller(BaseLLMCaller):
         return AIMessage(content=content)
 
     async def _call_image_understanding(self, messages: List[BaseMessage]) -> AIMessage:
-        """调用通用图像理解模块"""
+        """Calls general image understanding module"""
         msgs = self._convert_messages(messages)
         image_path = self.vlm_config.get("input_image")
         
@@ -120,15 +120,15 @@ class VisionLLMCaller(BaseLLMCaller):
         return AIMessage(content=content)
     
     async def _call_image_output(self, messages: List[BaseMessage]) -> AIMessage:
-        """图像生成/编辑模式 - 输出图像"""
-        # 提取prompt（最后一条用户消息）
+        """Image generation/editing mode - Output image"""
+        # Extract prompt (last user message)
         prompt = ""
         for msg in reversed(messages):
             if hasattr(msg, 'content'):
                 prompt = msg.content
                 break
         
-        # 调用图像生成函数
+        # Call image generation function
         save_path = self.vlm_config.get("output_image", "./generated_image.png")
         image_path = self.vlm_config.get("input_image") if self.mode == "edit" else None
         aspect_ratio = self.vlm_config.get("aspect_ratio", "16:9")
@@ -145,7 +145,7 @@ class VisionLLMCaller(BaseLLMCaller):
             aspect_ratio = aspect_ratio 
         )
         
-        content = f"图像已生成并保存至: {save_path}"
+        content = f"Image generated and saved to: {save_path}"
         return AIMessage(content=content, additional_kwargs={
             "image_path": save_path,
             "image_base64": b64,
@@ -166,7 +166,7 @@ class VisionLLMCaller(BaseLLMCaller):
         return processed_messages
 
 # ======================================================================
-# 快速自测
+# Quick Self-Test
 # ======================================================================
 if __name__ == "__main__":
     import os
@@ -180,12 +180,12 @@ if __name__ == "__main__":
         api_url = os.getenv("DF_API_URL")
         api_key = os.getenv("DF_API_KEY")
         if not api_url or not api_key:
-            print("❌  请先设置环境变量 DF_API_URL / DF_API_KEY")
+            print("❌  Please set environment variables DF_API_URL / DF_API_KEY first")
             sys.exit(1)
 
         img_path = Path(img_path).expanduser().resolve()
         if not img_path.exists():
-            print(f"❌  图片不存在: {img_path}")
+            print(f"❌  Image does not exist: {img_path}")
             sys.exit(1)
 
         request = SimpleNamespace(chat_api_url=api_url.rstrip("/"), api_key=api_key, model="gemini-2.5-flash-image-preview")

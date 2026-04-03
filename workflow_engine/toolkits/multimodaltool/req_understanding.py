@@ -41,13 +41,13 @@ async def call_image_understanding_async(
     **kwargs,
 ) -> str:
     """
-    调用通用图像理解模型
+    Calls general image understanding model
     """
     
-    # 1. 准备消息
+    # 1. Prepare messages
     processed_messages = [msg.copy() for msg in messages]
 
-    # 2. 处理图像
+    # 2. Process image
     if image_path:
         b64, fmt = encode_image_to_base64(image_path)
         
@@ -70,7 +70,7 @@ async def call_image_understanding_async(
                     {"type": "image_url", "image_url": {"url": f"data:image/{fmt};base64,{b64}"}}
                 )
         else:
-             # 如果没有 user 消息或列表为空，追加一条
+             # If no user message or list is empty, append one
             processed_messages.append({
                 "role": "user",
                 "content": [
@@ -79,7 +79,7 @@ async def call_image_understanding_async(
                 ]
             })
 
-    # 3. 使用 Provider 构造请求
+    # 3. Use Provider to construct request
     provider = get_provider(api_url, model)
     url, payload = provider.build_chat_request(
         api_url=api_url,
@@ -90,10 +90,10 @@ async def call_image_understanding_async(
         **kwargs
     )
     
-    # 4. 发送请求
+    # 4. Send request
     data = await _post_raw(url, api_key, payload, timeout)
     
-    # 5. 解析响应
+    # 5. Parse response
     return provider.parse_chat_response(data)
 
 if __name__ == "__main__":

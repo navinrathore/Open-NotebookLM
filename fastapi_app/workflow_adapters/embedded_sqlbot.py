@@ -419,7 +419,7 @@ class EmbeddedSQLBotAdapter:
             "sql": sql,
         }
         if not answer:
-            answer = f"已完成取数，返回 {query_result_data['row_count']} 行结果。"
+            answer = f"Data extraction completed, returning {query_result_data['row_count']} rows of results."
 
         export_data = {
             "format": "data",
@@ -542,7 +542,7 @@ class EmbeddedSQLBotAdapter:
         with runtime.Session(runtime.engine) as session:
             chat = runtime.Chat(
                 datasource_id=datasource_id,
-                title=chat_title or "智能取数",
+                title=chat_title or "AI Data Extraction",
             )
             session.add(chat)
             session.commit()
@@ -643,7 +643,7 @@ class EmbeddedSQLBotAdapter:
                 "record_id": record.id,
                 "message": {
                     "role": "assistant",
-                    "content": result.get("final_answer", "无法生成答案"),
+                    "content": result.get("final_answer", "Failed to generate answer"),
                     "timestamp": datetime.utcnow().isoformat(),
                 },
                 "status": record.status,

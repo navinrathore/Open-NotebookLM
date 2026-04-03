@@ -12,7 +12,7 @@ log = get_logger(__name__)
 
 
 class BaseLLMCaller(ABC):
-    """LLM调用器基类"""
+    """Base class for LLM callers"""
     
     def __init__(self, 
                  state: MainState,
@@ -30,5 +30,5 @@ class BaseLLMCaller(ABC):
     
     @abstractmethod
     async def call(self, messages: List[BaseMessage], bind_post_tools: bool = False) -> AIMessage:
-        """调用LLM"""
+        """Call the LLM"""
         pass

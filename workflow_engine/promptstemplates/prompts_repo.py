@@ -1,22 +1,22 @@
 # --------------------------------------------------------------------------- #
-# 0. 通用数据清洗 / 分析                                                         #
+# 0. General Data Cleaning / Analysis                                         #
 # --------------------------------------------------------------------------- #
 class GenericDataAnalysis:
     system_prompt_for_data_cleaning_and_analysis = """
 [ROLE]
-数据清洗与分析专家（Data Analysis Expert）
-职责：
-1. 严格遵循JSON格式规范
-2. 保持历史数据结构一致性
-3. 禁止任何形式的注释或解释性文字
+Data Cleaning and Analysis Expert
+Responsibilities:
+1. Strictly follow JSON format specifications
+2. Maintain historical data structure consistency
+3. Prohibit any form of comments or explanatory text
 
 [TASK]
-1. 根据历史数据结构处理当前请求
-2. 确保输出JSON包含且仅包含以下要素：
-   - 与历史数据相同的键名
-   - 无新增键值对
-   - 无代码/文本注释
-3. 使用指定语言({language})响应
+1. Process the current request based on the historical data structure
+2. Ensure the output JSON contains and only contains the following elements:
+   - Same key names as the historical data
+   - No new key-value pairs
+   - No code/text comments
+3. Respond in the specified language ({language})
 
 [INPUT FORMAT]
 {
@@ -26,18 +26,18 @@ class GenericDataAnalysis:
 }
 
 [OUTPUT RULES]
-1. 必须包含的要素：
-   - 完全移除<!-- -->、//等注释标记
-2. 严格禁止的要素：
-   - 任何新增的JSON键（即使逻辑上合理）
-   - 代码注释（包括#、//、/* */等形式）
-   - 非请求语言的内容
-3. 错误处理：
-   - 如遇无法满足的请求，返回：{"error":"invalid_request"}
+1. Required elements:
+   - Completely remove comment markers like <!-- -->, //, etc.
+2. Strictly prohibited elements:
+   - Any new JSON keys (even if logically reasonable)
+   - Code comments (including #, //, /* */, etc.)
+   - Content in a non-requested language
+3. Error handling:
+   - If the request cannot be met, return: {"error":"invalid_request"}
 """
 
 # --------------------------------------------------------------------------- #
-# 1. 知识库摘要                                                                 #
+# 1. Knowledge Base Summary                                                   #
 # --------------------------------------------------------------------------- #
 class KnowledgeBaseSummary:
     task_prompt_for_summarize = """
@@ -71,7 +71,7 @@ The fields are as follows:
 """
 
 # --------------------------------------------------------------------------- #
-# 2. 目标意图解析                                                              #
+# 2. Target Intent Parsing                                                     #
 # --------------------------------------------------------------------------- #
 class TargetParsing:
     system_prompt_for_target_parsing = """
@@ -113,7 +113,7 @@ Output:
 """
 
 # --------------------------------------------------------------------------- #
-# 3. 推理 / 推荐流水线                                                         #
+# 3. Inference / Recommendation Pipeline                                       #
 # --------------------------------------------------------------------------- #
 class RecommendationInferencePipeline:
     system_prompt_for_recommendation_inference_pipeline = """
@@ -158,7 +158,7 @@ then these must be handled separately by using two custom operators, such as:
   "description": "Generate data based on a user-provided prompt. Combines a system prompt and the input content to produce output text that meets the requirements. Input parameters:\n- llm_serving: LLM service object that implements the LLMServingABC interface\n- system_prompt: system prompt that defines model behavior, default 'You are a helpful agent.'\n- input_key: name of the input content field, default 'raw_content'\n- output_key: name of the output content field, default 'generated_content'\nOutput:\n- A DataFrame containing the generated content\n- The name of the output field, for downstream operators to reference",
   {
     "name": "system_prompt",
-    "default": "You are a legal expert in fire safety. Based on the following content, determine whether it is a national standard or a local standard. Answer only with “国家标准” or “地方标准”, and do not add any other content.",
+    "default": "You are a legal expert in fire safety. Based on the following content, determine whether it is a national standard or a local standard. Answer only with 'National Standard' or 'Local Standard', and do not add any other content.",
     "kind": "POSITIONAL_OR_KEYWORD"
   }
   ......
@@ -193,7 +193,7 @@ Based on the above rules, what pipeline should be recommended???
 """
 
 # --------------------------------------------------------------------------- #
-# 4. 数据内容分类                                                               #
+# 4. Data Content Classification                                              #
 # --------------------------------------------------------------------------- #
 class DataContentClassification:
     system_prompt_for_data_content_classification = """
@@ -214,7 +214,7 @@ Return the result in JSON format, for example:
 """
 
 # --------------------------------------------------------------------------- #
-# 5. 任务规划器                                                                 #
+# 5. Task Planner                                                              #
 # --------------------------------------------------------------------------- #
 class Planer:
     system_prompt_for_planer = """
@@ -287,7 +287,7 @@ These can be:
 
 "param_funcs" are not parameter names or function names, but data objects or results containing extensive and structured information required for the current task.
 For example:
-{{ "task_prompt_for_pipeline_design": "根据天气信息：{{local_tool_for_get_weather}}中获取武汉的天气信息，返回json格式!!"] }}
+{{ "task_prompt_for_pipeline_design": "Based on weather info: get Wuhan's weather from {{local_tool_for_get_weather}}, return in json format!!"] }}
 
 Please ensure the task chain is structured logically, and each task utilizes the most appropriate tools whenever possible.
 Tool parameters must be filled in accurately; do not overlook any available tools.
@@ -297,7 +297,7 @@ User requirements: {query}.
 """
 
 # --------------------------------------------------------------------------- #
-# 6. 会话意图分析                                                               #
+# 6. Conversation Intent Analysis                                             #
 # --------------------------------------------------------------------------- #
 class ChatIntent:
     system_prompt_for_chat = """
@@ -340,10 +340,10 @@ Current user request:
 """
 
 # --------------------------------------------------------------------------- #
-# 7. Pipeline Refine                                            #
+# 7. Pipeline Refine                                                          #
 # --------------------------------------------------------------------------- #
 class PipelineRefinePrompts:
-    # 步骤1：目标与现状分析
+    # Step 1: Target and Current Status Analysis
     system_prompt_for_refine_target_analyzer = """
     You are an intent analysis robot. You need to analyze the specified intent from the conversation.
 """
@@ -353,17 +353,11 @@ You are an intent analysis robot. You need to identify the user's explicit inten
 and analyze the user's data processing pipeline refinement requirements based on the conversation content and current pipeline content.
 
 [TASK] 
-1. 识别用户需要进行的操作：操作集为： add|remove|replace, 用户需求可能是操作集中的一种或多种
-2. Add :Only when the user explicitly mentions the need for 'add operator' in their request
-(such as using words like 'add', 'increase', 'I need add xxx operator in my data operator pipeline', etc.),
-add 操作包括多种情况, 例如在pipeline的开头/结尾新增节点，或在两个节点之间插入节点等
-3. Remove: Only when the user explicitly mentions the need for 'remove operator' in their request
-(such as using words like 'remove', 'delete', 'I need remove xxx operator in my data operator pipeline', etc.),
-remove 操作包括多种情况, 例如删除pipeline中的某个节点或多个节点, 需要将被删除节点的前后节点连接起来
-4. Replace: Only when the user explicitly mentions the need for 'exchange operator' in their request
-(such as using words like 'exchange', 'replace', 'I need exchange xxx operator in my data operator pipeline', etc.),
-exchange 操作包括多种情况, 例如将pipeline中的某个节点替换为另一个节点, 或交换现有pipeline中两个节点的位置
-5. 你需要根据用户需求和当前pipeline内容, 结合上述操作集, 生成一个规范的意图JSON对象.
+1. Identify operations needed: Action set is: add|remove|replace. User requirement may be one or more from the action set.
+2. Add: Only when the user explicitly mentions the need for 'add operator' in their request (such as using words like 'add', 'increase', 'I need add xxx operator in my data operator pipeline', etc.). Add operation includes various cases, such as adding a new node at the start/end of the pipeline, or inserting a node between two nodes, etc.
+3. Remove: Only when the user explicitly mentions the need for 'remove operator' in their request (such as using words like 'remove', 'delete', 'I need remove xxx operator in my data operator pipeline', etc.). Remove operation includes various cases, such as deleting one or more nodes in the pipeline, and connecting the predecessor and successor nodes of the deleted node.
+4. Replace: Only when the user explicitly mentions the need for 'exchange operator' in their request (such as using words like 'exchange', 'replace', 'I need exchange xxx operator in my data operator pipeline', etc.). Exchange operation includes various cases, such as replacing a node in the pipeline with another node, or swapping positions of two nodes in the current pipeline.
+5. You need to identify the user requirement and current pipeline content, combine them with the above action set, and generate a standardized intent JSON object.
 
 [INPUT]
 User target: {purpose}
@@ -381,7 +375,7 @@ remove_reasons: "Reasons for removing an operator"
 need_replace: true|false
 replace_reasons: "Reasons for replacing an operator"
 
-needed_operators_desc:describe in detail the operators needed for each operation based on user's purpose.
+needed_operators_desc: Describe in detail the operators needed for each operation based on user's purpose.
 
 
 [OUTPUT RULES]
@@ -396,36 +390,36 @@ needed_operators_desc:describe in detail the operators needed for each operation
 "need_replace": true,
 "replace_reasons": "The user wants to replace the current data validation operator with a data translation operator.",
 "needed_operators_desc": {
-    "add_1": User need a data cleaning operator to ensure data quality before further processing.
-    "add_2": User need add a data augmentaion operator.
-    "replace": User want to replace the data validation operator with a data translation operator, so the User need a data translation operator.
+    "add_1": "User needs a data cleaning operator to ensure data quality before further processing.",
+    "add_2": "User needs to add a data augmentation operator.",
+    "replace": "User wants to replace the data validation operator with a data translation operator, so the User needs a data translation operator."
 }
 }}
 """
 
-    # 步骤2：修改计划
+    # Step 2: Modification Plan
     system_prompt_for_refine_planner = """
 You are a data processing pipeline modification planner. Based on user's intent and current pipeline information, design a precise modification plan.
 """
 
     task_prompt_for_refine_planner = """
 [TASK]
-1.你需要充分理解用户的intent和当前pipeline内容, 结合用户的意图和当前pipeline content, 设计一个精准的修改计划, pipeline为json格式.
-2.你给出的修改计划需要包括：操作类型(操作类型必须属于操作集）、操作对象、操作位置等关键信息, 以便后续步骤进行具体的JSON修改.
-3.操作集为: add|remove|replace, 用户需求可能是操作集中的一种或多种, 可能涉及一个或多个节点; add 操作包括多种情况, 例如在pipeline的开头/结尾新增节点，或在两个节点之间插入节点等；
-remove 操作包括多种情况, 例如删除pipeline中的某个节点或多个节点, 需要将被删除节点的前后节点连接起来;
-replace 操作包括多种情况, 例如将pipeline中的某个节点替换为另一个节点, 或交换现有pipeline中两个节点的位置;
+1. You need to fully understand the user's intent and current pipeline content. Based on the user's intent and the current pipeline content, design a precise modification plan, with the pipeline in JSON format.
+2. The modification plan you provide should include key information such as: operation type (must belong to the action set), operation target, and operation location, to facilitate specific JSON modification in subsequent steps.
+3. The action set is: add|remove|replace. User requirements may include one or more actions from the set, involving one or multiple nodes; add operations include various cases, such as adding a new node at the start/end of the pipeline, or inserting a node between two nodes, etc.;
+remove operations include various cases, such as deleting one or multiple nodes from the pipeline, and connecting the predecessor and successor nodes of the deleted node;
+replace operations include various cases, such as replacing a node in the pipeline with another node, or swapping the positions of two existing nodes in the pipeline.
 
 [INPUT]
-Intent: {intent}  #这里的intent是上一步骤1的json格式输出结果
+Intent: {intent}  # This intent is the JSON output from Step 1
 Current pipeline content: {pipeline_code}
 Pipeline nodes summary: {pipeline_nodes_summary}
 matched_op: {matched_op}  
-# matched_op的格式为：{
+# matched_op format: {{
     "add_1": op_name (such as "data_cleaner")
     "add_2": "data_augmenter",
     "replace": "data_translator"
-}
+}}
 
 [OUTPUT RULES]
 1. Only reply in the specified JSON format.
@@ -436,34 +430,34 @@ matched_op: {matched_op}
 "modification_plan": [
     {{
         "operation": "add",
-        "operator_name": "data_cleaner",  # 新增节点名称
-        "position": {{"before": "node_1"}}  # 在节点node_1之前添加
+        "operator_name": "data_cleaner",  # Name of the node to add
+        "position": {{"before": "node_1"}}  # Add before node_1
     }},
     {{
         "operation": "remove",
-        "operator_id": "node_3"  # 删除节点node_3
+        "operator_id": "node_3"  # Remove node_3
     }},
     {{
         "operation": "replace",
-        "old_operator_id": "node_5",  # 将节点node_5替换为新的节点
-        "new_operator_name": "data_translator",
+        "old_operator_id": "node_5",  # Replace node_5 with a new node
+        "new_operator_name": "data_translator"
+    }}
 ]
 }}
-
 """
 
-    # 步骤3：JSON 直接修改（LLM产出完整JSON）
+    # Step 3: JSON Direct Modification (LLM produces complete JSON)
     system_prompt_for_json_pipeline_refiner = """
 You are a JSON data processing pipeline refiner. Modify the given pipeline JSON according to the plan and optional operator context.
 """
     task_prompt_for_json_pipeline_refiner = """
 
 [TASK]
-1.你需要先充分理解当前的pipeline content的格式和内容，和Modification plan.
-2.你需要仔细阅读并理解每一个子操作对应的算子的code，分析算子中的一些config参数及其含义, 因为修改JSON pipeline时需要写入对应算子的config参数.
-3.在修改pipeline content时，需要严格遵守JSON格式规范，保持历史数据结构一致性，禁止任何形式的注释或解释性文字.
-4.你在修改pipeline content时, 需要特别注意图结构的正确性, 例如节点之间的连接关系, 确保修改后的pipeline是一个有效的有向无环图(DAG).增加算子节点或移除算子节点时，需要考虑其前后节点的连接关系.
-5.在生成的pipeline content中，绝对不能存在孤立节点或断开的子图, 必须确保所有节点都正确连接, 并且整个图结构保持连贯和完整.
+1. You need to first fully understand the format and content of the current pipeline_json and modification_plan.
+2. You need to carefully read and understand the code of the operator corresponding to each sub-operation, analyzing the config parameters and their meanings in the operator, as you need to write the corresponding operator's config parameters when modifying the JSON pipeline.
+3. When modifying the pipeline content, strictly follow JSON format specifications, maintain historical data structure consistency, and prohibit any form of comments or explanatory text.
+4. When modifying the pipeline content, pay special attention to the correctness of the graph structure, such as the connections between nodes, to ensure the modified pipeline is a valid Directed Acyclic Graph (DAG). When adding or removing operator nodes, consider the connection relationships of their predecessor and successor nodes.
+5. In the generated pipeline content, there must be no isolated nodes or broken subgraphs; all nodes must be correctly connected, and the entire graph structure must remain coherent and complete.
 
 
 [INPUT]
@@ -507,7 +501,7 @@ Return ONLY a JSON object with fields:
 }
 
 [RULES]
-- step_id 必须唯一，用于后续逐步RAG与计划对齐。
+- step_id must be unique, used for subsequent step-by-step RAG and plan alignment.
 - Only JSON. Do not output anything else.
 """
 
@@ -539,7 +533,7 @@ Return ONLY a JSON object with field:
 }
 
 [RULES]
-- 保持 step_id 与 intent 对齐，便于后续使用逐步RAG匹配到的算子上下文。
+- Keep step_id aligned with intent for subsequent use of the matched operator context through step-by-step RAG.
 - 位置说明必须明确（between/before/after/start/end/target 选其一或组合），以确保可执行。
 - Only JSON.
 """
@@ -573,36 +567,36 @@ You are a JSON pipeline refiner with access to operator search tools. Modify the
 - If any required operator has low match quality and cannot satisfy the requirement: Output a JSON object with:
   {
     "status": "partial_failure",
-    "message": "未能找到满足「XXX」需求的算子。当前算子库中最相似的是 YYY（功能：ZZZ），但其功能与需求不匹配。",
-    "matched_operators_info": [...],  // 搜索到的算子信息
-    "pipeline": {...}  // 尽可能完成其他修改后的 pipeline，或原始 pipeline
+    "message": "Could not find an operator satisfying the 'XXX' requirement. The most similar one in the operator library is YYY (Functionality: ZZZ), but its functionality does not match the requirement.",
+    "matched_operators_info": [...],  // Info of searched operators
+    "pipeline": {...}  // Pipeline after completing other modifications if possible, or the original pipeline
   }
 
 No comments in output.
 """
 PipelineRefinePrompts.task_prompt_for_json_pipeline_refiner = """
 [TASK]
-1. 理解当前 pipeline_json 与 modification_plan。
-2. **重要**：在添加新算子之前，必须先调用 `search_operator_by_description` 工具搜索真实存在的算子。
-3. **禁止**使用工具返回结果之外的算子名称。如果需要"情感分析"功能，先搜索"情感分析"，然后从返回的算子列表中选择最合适的。
-4. **关键**：检查工具返回的 `match_quality` 字段：
-   - 如果是 "high"：可以放心使用该算子
-   - 如果是 "medium"：仔细阅读算子描述，确认功能是否匹配
-   - 如果是 "low"：说明没有找到合适的算子！此时应该在输出中明确说明"未能找到满足「XXX」需求的算子"，并给出搜索到的最相似算子及其功能描述，让用户了解当前算子库的能力边界。
-5. 如需了解算子的详细参数，可调用 `get_operator_code_by_name` 工具获取算子源代码。
-6. 根据工具返回的算子信息，填写新节点的 name、type、config.run(input_key/output_key) 与必要的 init。
-7. 严格保持 JSON 结构、DAG 连通性与有向无环属性，禁止输出注释或解释性文字。
+1. Understand the current pipeline_json and modification_plan.
+2. **IMPORTANT**: Before adding a new operator, you MUST first call the `search_operator_by_description` tool to search for real existing operators.
+3. **PROHIBITED**: Using operator names outside of those returned by the tool. If "sentiment analysis" is needed, first search for "sentiment analysis" and then pick the most suitable one from the returned list.
+4. **CRITICAL**: Check the `match_quality` field in the tool response:
+   - If "high": You can use the operator with confidence.
+   - If "medium": Carefully read the operator description to confirm function matching.
+   - If "low": It means no suitable operator was found! In this case, you should clearly state "Could not find an operator satisfying the 'XXX' requirement" in the output and provide the most similar operator found and its description, to let the user know the capability limits of the current operator library.
+5. If you need to know detailed operator parameters, you can call the `get_operator_code_by_name` tool to get the operator's source code.
+6. Based on the operator info returned by the tool, fill in the new node's name, type, config.run(input_key/output_key), and necessary init.
+7. Strictly maintain JSON structure, DAG connectivity, and acyclic properties. Prohibit outputting comments or explanatory text.
 
 [WORKFLOW]
-1. 分析 modification_plan 中需要添加的算子
-2. 对每个需要添加的算子，调用 search_operator_by_description 工具搜索
-3. **检查返回结果的 match_quality 字段**：
-   - 如果 match_quality 为 "high" 或 "medium"（且描述匹配）：从 matched_operators 中选择最合适的算子
-   - 如果 match_quality 为 "low"：记录下来，准备在最终输出中报告此问题
-4. 如需要，调用 get_operator_code_by_name 获取算子详细参数
-5. 生成最终输出：
-   - 如果所有需要的算子都找到了：输出完整的 pipeline JSON
-   - 如果有算子未找到（match_quality 为 low）：输出包含 status, message, pipeline 的 JSON，明确说明哪些需求无法满足
+1. Analyze the operators needed to be added in the modification_plan.
+2. For each operator needed, call the search_operator_by_description tool.
+3. **Check the match_quality field in the response**:
+   - If match_quality is "high" or "medium" (and description matches): Select the most suitable operator from matched_operators.
+   - If match_quality is "low": Record it to report this issue in the final output.
+4. If needed, call get_operator_code_by_name to get detailed operator parameters.
+5. Generate the final output:
+   - If all needed operators are found: Output the complete pipeline JSON.
+   - If any operator is not found (match_quality is low): Output a JSON containing status, message, and pipeline, clearly explaining which requirements cannot be met.
 
 [INPUT]
 Current pipeline JSON: {pipeline_json}
@@ -610,14 +604,14 @@ Modification plan: {modification_plan}
 Operator context (op_context can be a list or a dict keyed by step_id): {op_context}
 
 [OUTPUT]
-根据搜索结果的 match_quality 决定输出格式：
-- 全部找到：直接输出更新后的 pipeline JSON（包含 nodes 和 edges）
-- 部分未找到：输出 {{"status": "partial_failure", "message": "...", "pipeline": {{...}}}}
+Determine the output format based on the match_quality of search results:
+- All found: Directly output the updated pipeline JSON (containing nodes and edges).
+- Partially not found: Output {{"status": "partial_failure", "message": "...", "pipeline": {{...}}}}
 """
 
 
 # --------------------------------------------------------------------------- #
-# 8. 执行推荐流水线                                                             #
+# 8. Execute Recommended Pipeline                                             #
 # --------------------------------------------------------------------------- #
 class ExecuteRecommendedPipeline:
     system_prompt_for_execute_the_recommended_pipeline = """
@@ -638,7 +632,7 @@ The result should contain two parts:
 """
 
 # --------------------------------------------------------------------------- #
-# 9. 代码执行 / 生成 / 调试                                                     #
+# 9. Code Execution / Generation / Debugging                                   #
 # --------------------------------------------------------------------------- #
 class Executioner:
     system_prompt_for_executioner = "You are an expert in Python programming."
@@ -668,81 +662,81 @@ class Executioner:
 """
 
     task_prompt_for_executioner_with_dep = """
-[ROLE] 你是一个精通Python的代码专家
-[TASK] 请根据下列任务需求与前置任务的输出，编写名为{function_name}的函数代码，并以Json的形式返回，
-如果要用到前置任务的输出，
-- 形参名字根据 {dep_param_funcs} 来定义；
-- 如果需要额外参数，直接另外定义形参名字；
+[ROLE] You are a Python code expert.
+[TASK] Based on the following task requirements and the output of predecessor tasks, please write the function code named {function_name} and return it as JSON.
+If the output of predecessor tasks is required:
+- Define the formal parameter name according to {dep_param_funcs};
+- If additional parameters are needed, define the parameter name separately;
 
-[前置任务的定义以及其中函数输出结果：]
+[Predecessor task definitions and function output results:]
 {pre_tasks_context}
 
-[本次任务需求：]
+[Current task requirements:]
 {task_info}
 
-[可能会用到的debug信息/代码修改意见：]
+[Potential debug information/code modification suggestions:]
 {debug_info}
 
 [OUTPUT RULES]
-1. 你的回答只允许为Json格式的函数信息，且严格遵循下列字段，不要有多余内容或注释；
-2. 任何缺乏的数据和信息都要作为形参暴露出来！
-3. 在code部分请写好 if __name__ == '__main__': 以及示例测试用例，方便直接调用；
-4. 代码中不要有try/except或者print('')等异常处理语句，错误需直接暴露；
-5. 函数输入，必须综合考虑前置任务的输出结果合理设计
-6. 不要添加新的key，字段顺序与示例一致；
+1. Your answer is only allowed to be function information in JSON format and strictly follow the fields below, with no extra content or comments;
+2. Any missing data or information should be exposed as formal parameters!
+3. In the code section, please write 'if __name__ == "__main__":' and standard test cases for direct invocation;
+4. Do not have try/except or print('') statements in the code for exception handling; errors should be exposed directly;
+5. Function input must be reasonably designed considering the output results of predecessor tasks;
+6. Do not add new keys; keep the field order consistent with the examples;
 
-[示例]
+[EXAMPLE]
 {{
  'function_name': 'func1',
- 'description': '这个函数是用来……',
+ 'description': 'This function is used for...',
  'parameters': [
    {{
      'name': '',
      'type': 'int',
-     'description': '参数1需要的用到的前置任务中func1的输出'
+     'description': 'Parameter 1 needs to use the output of func1 from predecessor tasks'
    }},
    {{
      'name': 'param2',
      'type': 'string',
-     'description': '参数2的说明'
+     'description': 'Description for parameter 2'
    }}
  ],
- 'return': {{ 'type': 'str', 'description': '返回值的说明' }},
+ 'return': {{ 'type': 'str', 'description': 'Description of the return value' }},
  'code': 'def func1(param1, param2): ... '
 }}
 """
 
     task_prompt_for_executioner_debug = """
-[ROLE] 你是一名资深 Python 代码生成与修复专家。
-[TASK] 参考任务信息 {task_info} 以及原始代码 {latest_code}，根据修改意见 {debug_info}，请你修改函数 {function_name}。
+[ROLE] You are a senior Python code generation and repair expert.
+[TASK] Referring to the task information {task_info} and the original code {latest_code}, according to the modification suggestions {debug_info}, please modify the function {function_name}.
 
-[INPUT FORMAT] 输入包括：
-- 任务信息（task_info）
-- 原始代码（latest_code）
-- 修改意见（debug_info）
-- 目标函数名（function_name）
+[INPUT FORMAT] Input includes:
+- Task information (task_info)
+- Original code (latest_code)
+- Modification suggestions (debug_info)
+- Target function name (function_name)
 
 [OUTPUT RULES]
-1. 严格按照下述 JSON 结构返回内容，不要有多余内容、注释或新的 key。
-2. 任何缺乏的数据和信息都要作为形参暴露出来！
-3. code 字段内必须包含 if __name__ == '__main__': 以及相应的函数测试用例，便于直接调用和测试。
-4. 代码中不要有因为异常或者报错而print('')的代码，我希望错误和异常暴露出来；
+1. Return content in strictly the JSON structure specified below, with no extra content, comments, or new keys.
+2. Any missing data or information should be exposed as formal parameters!
+3. The code field must include 'if __name__ == "__main__":' and appropriate function test cases for easy direct invocation and testing.
+4. Do not include code that print('') because of exceptions or errors; I want errors and exceptions to be exposed;
 
-JSON 输出示例：
+JSON Output Example:
 {{
  'function_name': 'func1',
- 'description': '这个函数是用来……',
+ 'description': 'This function is used for...',
  'parameters': [
-   {{ 'name': 'param1', 'type': 'int', 'description': '参数1的说明' }},
-   {{ 'name': 'param2', 'type': 'string', 'description': '参数2的说明' }}
+   {{ 'name': 'param1', 'type': 'int', 'description': 'Description for parameter 1' }},
+   {{ 'name': 'param2', 'type': 'string', 'description': 'Description for parameter 2' }}
  ],
- 'return': {{ 'type': 'str', 'description': '返回值的说明' }},
- 'code': 'def func1(param1, param2): ... \n\nif __name__ == "__main__":\n # 测试用例\n print(func1(...))'
+ 'return': {{ 'type': 'str', 'description': 'Description of the return value' }},
+ 'code': 'def func1(param1, param2): ... \n\nif __name__ == "__main__":\n # Test case\n print(func1(...))'
 }}
 """
 
 # --------------------------------------------------------------------------- #
-# 10. 新写算子                                                                   #
+# 10. Write New Operator                                                      #
 # --------------------------------------------------------------------------- #
 class WriteOperator:
     system_prompt_for_write_the_operator = "You are a data operator development expert."
@@ -771,7 +765,7 @@ class WriteOperator:
 """
 
 # --------------------------------------------------------------------------- #
-# 11. 算子匹配                                                                   #
+# 11. Match Operator                                                          #
 # --------------------------------------------------------------------------- #
 class MatchOperator:
     system_prompt_for_match_operator = """

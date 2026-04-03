@@ -52,24 +52,24 @@ class MultiTurnReactAgent(FnCallAgent):
 
         self.llm_generate_cfg = llm["generate_cfg"]
         self.llm_local_path = llm["model"]
-        self.api_key = llm.get("api_key", "EMPTY")  # 保存 API key
-        self.api_base = llm.get("api_base", "")  # 保存 API base URL
+        self.api_key = llm.get("api_key", "EMPTY")  # Save API key
+        self.api_base = llm.get("api_base", "")  # Save API base URL
 
     def sanity_check_output(self, content):
         return "<think>" in content and "</think>" in content
     
     def call_server(self, msgs, planning_port, max_tries=3):
 
-        # 使用传入的 planning_port 构造 API base URL
-        # planning_port 实际上是完整的 API base URL（从 api_base 传递过来）
+        # Construct API base URL using provided planning_port
+        # planning_port is actually the full API base URL (passed from api_base)
         if isinstance(planning_port, str) and ('http://' in planning_port or 'https://' in planning_port):
-            # 如果 planning_port 是完整的 URL，直接使用
+            # If planning_port is a full URL, use it directly
             openai_api_base = planning_port if planning_port.endswith('/v1') else f"{planning_port}/v1"
         else:
-            # 否则假设是端口号
+            # Otherwise assume it's a port number
             openai_api_base = f"http://127.0.0.1:{planning_port}/v1"
 
-        # 使用实际的 API key，而不是硬编码的 "EMPTY"
+        # Use actual API key instead of hardcoded "EMPTY"
         openai_api_key = self.api_key
 
         client = OpenAI(
@@ -110,7 +110,7 @@ class MultiTurnReactAgent(FnCallAgent):
 
             if attempt < max_tries - 1:
                 sleep_time = base_sleep_time * (2 ** attempt) + random.uniform(0, 1)
-                sleep_time = min(sleep_time, 10)  # 最大等待 10 秒
+                sleep_time = min(sleep_time, 10)  # Wait at most 10 seconds
 
                 print(f"Retrying in {sleep_time:.2f} seconds...")
                 time.sleep(sleep_time)
@@ -121,15 +121,15 @@ class MultiTurnReactAgent(FnCallAgent):
 
     def count_tokens(self, messages):
         """
-        估算消息的 token 数量
-        使用 tiktoken 或简单估算，避免依赖特定模型的 tokenizer
+        Estimate message token count.
+        Uses tiktoken or simple estimation to avoid dependency on specific model tokenizers.
         """
         try:
-            # 方案 1: 尝试使用 tiktoken（OpenAI 的 tokenizer）
+            # Option 1: Try using tiktoken (OpenAI's tokenizer)
             import tiktoken
             encoding = tiktoken.get_encoding("cl100k_base")
 
-            # 将消息转换为文本
+            # Convert message to text
             full_text = ""
             for msg in messages:
                 role = msg.get("role", "")
@@ -138,13 +138,13 @@ class MultiTurnReactAgent(FnCallAgent):
 
             token_count = len(encoding.encode(full_text))
         except:
-            # 方案 2: 如果 tiktoken 不可用，使用简单估算
-            # 平均每个 token 约 4 个字符（英文）或 1.5 个字符（中文）
+            # Option 2: If tiktoken is unavailable, use simple estimation
+            # Avg ~4 chars per token (English) or ~1.5 chars (Chinese)
             full_text = ""
             for msg in messages:
                 content = msg.get("content", "")
                 full_text += content
-            # 使用保守估算：每 3 个字符 = 1 token
+            # Use conservative estimate: 3 chars = 1 token
             token_count = len(full_text) // 3
         return token_count
 

@@ -120,7 +120,7 @@ export const Modal: React.FC<ModalProps> = ({
                     <button
                       onClick={onClose}
                       className="shrink-0 p-2 text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors"
-                      aria-label="关闭对话框"
+                      aria-label="Close dialog"
                     >
                       <X size={20} />
                     </button>
