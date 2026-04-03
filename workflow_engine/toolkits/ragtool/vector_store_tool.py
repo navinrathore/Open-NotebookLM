@@ -5,24 +5,14 @@ import shutil
 import subprocess
 import uuid
 import httpx
-import numpy as np
-import faiss
 import asyncio
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union, Tuple
 
-import fitz  # PyMuPDF, fallback for when MinerU fails
-from PIL import Image
-
-# Import existing tools
-from workflow_engine.toolkits.multimodaltool.mineru_tool import run_mineru_pdf_extract
-from workflow_engine.toolkits.multimodaltool.req_videos import call_video_understanding_async
-from workflow_engine.toolkits.multimodaltool.req_understanding import call_image_understanding_async
-import workflow_engine.utils as utils
+# Central Logger
 from workflow_engine.logger import get_logger
-
 log = get_logger(__name__)
 
 
@@ -333,6 +323,7 @@ class VectorStoreManager:
         return sorted(hits, key=lambda x: x["score"], reverse=True)
 
     def _load_index(self):
+        # Lazy load FAISS for faster core initialization
         if self.faiss_index_path.exists() and self.faiss_meta_path.exists():
             log.info(f"Loading existing index from {self.faiss_index_path}")
             self.index = faiss.read_index(str(self.faiss_index_path))
@@ -503,7 +494,7 @@ class VectorStoreManager:
                 else:
                     res["context_content"] = res.get("content")
 
-        return combined_results
+        return results
 
     def _search_vector(self, query: str, top_k: int = 5, file_ids: Optional[List[str]] = None) -> List[Dict]:
         """Core FAISS vector search implementation."""
@@ -779,7 +770,7 @@ class VectorStoreManager:
             file_id = str(uuid.uuid4())
         ext = file_path.suffix.lower()
         
-        # --- Metadata Prioritization (Roadmap #6) ---
+        # --- Metadata Prioritization ---
         # Extract legal hierarchy and dates early to embed them into metadata
         prio_meta = self._extract_metadata_from_filename(file_path.name)
         
@@ -866,7 +857,8 @@ class VectorStoreManager:
         return pdf_path
 
     def _pdf_to_markdown_fallback(self, file_path: Path, output_subdir: Path) -> Path:
-        """Fallback when MinerU is unavailable: extract text using PyMuPDF and write to a single .md file, returns the md path."""
+        """Fallback when MinerU is unavailable: extract text using PyMuPDF and write to a single .md file."""
+        import fitz # Lazy load PyMuPDF
         stem = file_path.stem
         out_dir = output_subdir / stem
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -889,20 +881,21 @@ class VectorStoreManager:
             return md_path
 
     async def _process_pdf(self, file_path: Path, record: Dict, file_id: str):
-        # 1. MinerU Extract：以 pdf_stem 为子目录名，便于跨流程复用缓存
-        #    使用 pipeline 后端避免 vLLM 与 MinerU 的版本冲突（ParallelConfig.world_size 等）
-        #    目录结构: {mineru_output_base}/{pdf_stem}/auto/*.md
+        # Lazy load MinerU tool
+        from workflow_engine.toolkits.multimodaltool.mineru_tool import run_mineru_pdf_extract
+        
         if self.mineru_output_base:
-            output_subdir = self.mineru_output_base
+            output_subdir = self.mineru_output_base / file_id
         else:
-            output_subdir = self.processed_dir / file_id
+            from workflow_engine.utils import get_project_root
+            output_subdir = get_project_root() / "outputs" / "kb_mineru" / file_id
         output_subdir.mkdir(parents=True, exist_ok=True)
         record["mineru_output_path"] = str(output_subdir)
 
         pdf_stem = file_path.stem
         mineru_output_folder = output_subdir / pdf_stem
 
-        # Detect existing MinerU cache: if {output_subdir}/{pdf_stem}/auto/*.md already exists, skip it.
+        # Detect existing MinerU cache
         md_file = None
         cached = False
         if mineru_output_folder.exists():
@@ -944,7 +937,6 @@ class VectorStoreManager:
                 "output_dir": str(output_subdir),
                 "cached": cached
             }
-            # Keep legacy fields for backward compatibility
             record["processed_md_path"] = str(md_file)
             record["images_dir"] = str(md_file.parent / "images")
 
@@ -960,17 +952,15 @@ class VectorStoreManager:
                 "output_dir": str(output_subdir),
                 "fallback": True
             }
-            # Keep legacy fields for backward compatibility
             record["processed_md_path"] = str(md_file)
             record["images_dir"] = str(md_file.parent / "images")
 
-        # 2. Chunking & Embedding (LangChain RecursiveCharacterTextSplitter when available)
+        # Chunking & Embedding
         with open(md_file, 'r', encoding='utf-8') as f:
             content = f.read()
 
         chunks = _chunk_text(content)
         if not chunks:
-            # Fallback: simple paragraph split
             chunks = [c.strip() for c in content.split('\n\n') if c.strip()]
             chunks = [c for c in chunks if len(c) > 10]
         
@@ -988,7 +978,6 @@ class VectorStoreManager:
             self._add_vectors(vectors, meta_list)
             record["chunks_count"] = len(chunks)
 
-            # Write chunks_info.json to the MinerU output directory to confirm chunking and provide previews.
             chunks_info_path = output_subdir / "chunks_info.json"
             try:
                 chunks_info = {
@@ -1005,24 +994,16 @@ class VectorStoreManager:
                 log.warning(f"Could not write chunks_info.json: {e}")
 
     async def _process_word(self, file_path: Path, record: Dict, file_id: str):
-        # Convert to PDF first
         temp_dir = self.processed_dir / "temp" / file_id
         pdf_path = self._convert_to_pdf(file_path, temp_dir)
-        
-        # Reuse PDF processing
         await self._process_pdf(pdf_path, record, file_id)
-        
-        # Cleanup temp PDF
-        # shutil.rmtree(temp_dir, ignore_errors=True)
 
     async def _process_ppt(self, file_path: Path, record: Dict, file_id: str):
-        # Same as Word, convert to PDF first
         temp_dir = self.processed_dir / "temp" / file_id
         pdf_path = self._convert_to_pdf(file_path, temp_dir)
         await self._process_pdf(pdf_path, record, file_id)
 
     async def _process_text(self, file_path: Path, record: Dict, file_id: str):
-        """Process plain text / markdown files: read → chunk → embed."""
         content = file_path.read_text(encoding="utf-8", errors="replace")
         if not content.strip():
             log.warning(f"Empty text file: {file_path}")
@@ -1052,15 +1033,15 @@ class VectorStoreManager:
             record["status"] = "skipped"
 
     async def _process_media(self, file_path: Path, description: Optional[str], record: Dict, file_id: str):
-        desc_text = description
+        # Lazy load multimodal tools
+        from workflow_engine.toolkits.multimodaltool.req_videos import call_video_understanding_async
+        from workflow_engine.toolkits.multimodaltool.req_understanding import call_image_understanding_async
         
-        # If no description provided, generate one using multimodal API
+        desc_text = description
         if not desc_text:
             log.info(f"No description for {file_path.name}, calling Multimodal API...")
             try:
                 ext = file_path.suffix.lower()
-                messages = []
-                
                 # Check file type
                 if ext in ['.png', '.jpg', '.jpeg']:
                     # Image Understanding
