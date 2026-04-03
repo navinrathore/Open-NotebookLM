@@ -272,8 +272,7 @@ def try_rag_retrieve(state: IntelligentQAState) -> None:
         log.warning("[_try_rag_retrieve] Skipped: no base_dir")
         return
     if not state.request.file_ids:
-        log.warning("[_try_rag_retrieve] Skipped: no file_ids")
-        return
+        log.info("[_try_rag_retrieve] No specific file_ids provided. Will search entire notebook.")
     if not state.request.query:
         log.warning("[_try_rag_retrieve] Skipped: no query")
         return
@@ -724,8 +723,7 @@ def create_intelligent_qa_graph() -> GenericGraphBuilder:
             log.warning("[_try_rag_retrieve] Skipped: no base_dir")
             return
         if not state.request.file_ids:
-            log.warning("[_try_rag_retrieve] Skipped: no file_ids")
-            return
+            log.info("[_try_rag_retrieve] No specific file_ids provided. Will search entire notebook.")
         if not state.request.query:
             log.warning("[_try_rag_retrieve] Skipped: no query")
             return

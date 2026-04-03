@@ -4,7 +4,7 @@ import {
   ChevronLeft, Scale, Calendar, User, Briefcase, 
   FileText, MessageSquare, ExternalLink, Download,
   Clock, Info, Shield, Hash, Send, Bot, User as UserIcon, Loader2,
-  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload
+  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload, Globe, Type
 } from 'lucide-react';
 import { Case, CaseDocument } from '../types/case';
 import { apiFetch } from '../config/api';
@@ -27,6 +27,18 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
   const [chatLoadingStage, setChatLoadingStage] = useState('Thinking...');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [fileUploading, setFileUploading] = useState(false);
+  // URL import state
+  const [introduceUrl, setIntroduceUrl] = useState('');
+  const [introduceUrlLoading, setIntroduceUrlLoading] = useState(false);
+  const [introduceUrlError, setIntroduceUrlError] = useState('');
+  const [introduceUrlSuccess, setIntroduceUrlSuccess] = useState('');
+  // Text paste state
+  const [introduceText, setIntroduceText] = useState('');
+  const [introduceTextLoading, setIntroduceTextLoading] = useState(false);
+  const [introduceTextError, setIntroduceTextError] = useState('');
+  const [introduceTextSuccess, setIntroduceTextSuccess] = useState('');
   
   // Three-column layout state
   const [leftPanelWidth, setLeftPanelWidth] = useState(380);
@@ -49,12 +61,75 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
 
   const fetchDocuments = async () => {
     setLoadingDocs(true);
+    const em = user?.email || user?.id || 'local';
     try {
-      const res = await apiFetch(`/api/v1/cases/${caseItem.case_number}/${caseItem.case_year}/documents`);
-      const data = await res.json();
-      if (data?.success) {
-        setDocuments(data.documents || []);
+      // 1. Fetch case-specific documents (Official orders/filings)
+      const caseRes = await apiFetch(`/api/v1/cases/${caseItem.case_number}/${caseItem.case_year}/documents`);
+      const caseData = await caseRes.json();
+      const officialDocs: CaseDocument[] = caseData?.success ? (caseData.documents || []) : [];
+
+      // 2. Fetch knowledge base documents (Added sources/URLs/Text)
+      const params = new URLSearchParams({ email: em });
+      if (caseItem.notebook_id) params.set('notebook_id', caseItem.notebook_id);
+      
+      const kbRes = await apiFetch(`/api/v1/kb/list?${params.toString()}`);
+      let kbDocs: CaseDocument[] = [];
+      if (kbRes.ok) {
+        const kbData = await kbRes.json();
+        const files = Array.isArray(kbData?.files) ? kbData.files : [];
+        kbDocs = files.map((f: any) => {
+          const filename = f.original_path ? f.original_path.split('/').pop() : (f.id || 'Source');
+          
+          // Resolve static URL from original_path if possible
+          let resolvedUrl = f.url || '';
+          if (!resolvedUrl && f.original_path) {
+            const idx = f.original_path.indexOf('/outputs/');
+            if (idx >= 0) {
+              resolvedUrl = f.original_path.slice(idx);
+            }
+          }
+
+          return {
+            name: filename,
+            url: resolvedUrl,
+            local_path: f.original_path,
+            type: f.file_type || 'upload',
+            status: f.status === 'done' ? 'AI-Indexed & Ready' : (f.status || 'imported'),
+            date: f.created_at ? new Date(f.created_at).toLocaleDateString() : 'Added Source'
+          };
+        });
       }
+
+      // 3. Merge and deduplicate
+      const merged = [...officialDocs];
+      const existingPaths = new Set(officialDocs.map(d => d.local_path || d.url));
+
+      kbDocs.forEach(kbDoc => {
+        const path = kbDoc.local_path || kbDoc.url;
+        if (path && !existingPaths.has(path)) {
+          merged.push(kbDoc);
+          existingPaths.add(path);
+        }
+      });
+
+      // Auto-select new documents by default
+      const currentDocPaths = new Set(documents.map(d => d.local_path || d.url));
+      const newPaths: string[] = [];
+      merged.forEach(doc => {
+        const path = doc.local_path || doc.url || doc.name;
+        if (path && !currentDocPaths.has(path)) {
+           newPaths.push(path);
+        }
+      });
+
+      if (newPaths.length > 0) {
+        setSelectedFiles(prev => {
+          const next = new Set([...prev, ...newPaths]);
+          return Array.from(next);
+        });
+      }
+
+      setDocuments(merged);
     } catch (err) {
       console.error('Failed to fetch documents:', err);
     } finally {
@@ -77,7 +152,7 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query: inputMsg,
-          files: [],
+          files: selectedFiles,
           notebook_id: caseItem.notebook_id,
           email: user?.email || user?.id || 'local',
           history: chatMessages.map(m => ({ role: m.role, content: m.content }))
@@ -130,27 +205,98 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
     }
   };
 
-  const uploadFiles = async (files: FileList) => {
-    // Shared upload engine logic
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+  const uploadFiles = async (inputFiles: FileList | File[]) => {
+    const uploadQueue = Array.from(inputFiles || []);
+    if (!uploadQueue.length) return;
+    setFileUploading(true);
+    setShowUploadModal(false);
+    let successCount = 0;
+    for (const file of uploadQueue) {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('email', user?.email || 'local');
         formData.append('user_id', user?.id || 'local');
         formData.append('notebook_id', caseItem.notebook_id || '');
-
+        formData.append('notebook_title', caseItem.case_title || caseItem.case_number || '');
         try {
-            await apiFetch('/api/v1/kb/upload', {
+            const res = await apiFetch('/api/v1/kb/upload', {
                 method: 'POST',
                 body: formData,
             });
+            if (res.ok) successCount++;
         } catch (err) {
             console.error('File upload failed:', file.name, err);
         }
     }
+    setFileUploading(false);
     fetchDocuments();
-    setShowUploadModal(false);
+  };
+
+  const handleImportUrlAsSource = async () => {
+    const url = introduceUrl.trim();
+    if (!url) return;
+    setIntroduceUrlLoading(true);
+    setIntroduceUrlError('');
+    setIntroduceUrlSuccess('');
+    try {
+      const res = await apiFetch('/api/v1/kb/import-url-as-source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user?.email || 'local',
+          user_id: user?.id || 'local',
+          notebook_id: caseItem.notebook_id || '',
+          notebook_title: caseItem.case_title || caseItem.case_number || '',
+          url,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        setIntroduceUrlSuccess(`Imported: ${data.filename || url}`);
+        setIntroduceUrl('');
+        fetchDocuments();
+      } else {
+        setIntroduceUrlError(data?.detail || 'Import failed');
+      }
+    } catch (err: any) {
+      setIntroduceUrlError(err?.message || 'Import failed');
+    } finally {
+      setIntroduceUrlLoading(false);
+    }
+  };
+
+  const handleAddTextSource = async () => {
+    const text = introduceText.trim();
+    if (!text) return;
+    setIntroduceTextLoading(true);
+    setIntroduceTextError('');
+    setIntroduceTextSuccess('');
+    try {
+      const res = await apiFetch('/api/v1/kb/import-text-as-source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user?.email || 'local',
+          user_id: user?.id || 'local',
+          notebook_id: caseItem.notebook_id || '',
+          notebook_title: caseItem.case_title || caseItem.case_number || '',
+          text,
+          title: 'Pasted Text',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        setIntroduceTextSuccess('Text saved as source');
+        setIntroduceText('');
+        fetchDocuments();
+      } else {
+        setIntroduceTextError(data?.detail || 'Save failed');
+      }
+    } catch (err: any) {
+      setIntroduceTextError(err?.message || 'Save failed');
+    } finally {
+      setIntroduceTextLoading(false);
+    }
   };
 
   const handleImportDocument = async (doc: CaseDocument) => {
@@ -346,6 +492,21 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
                        className={`group p-3 border border-[var(--border)] rounded-xl hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] transition-all ${doc.status === 'available' ? 'border-dashed opacity-80' : 'cursor-pointer'}`}
                      >
                        <div className="flex items-start gap-4">
+                         <div className="pt-2">
+                            <input 
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-neutral-300 text-[var(--accent)] focus:ring-[var(--accent)] bg-[var(--surface)] transition-all cursor-pointer"
+                              checked={selectedFiles.includes(doc.local_path || doc.url || doc.name)}
+                              onChange={(e) => {
+                                 const fileId = doc.local_path || doc.url || doc.name;
+                                 if (e.target.checked) setSelectedFiles(prev => [...prev, fileId]);
+                                 else setSelectedFiles(prev => prev.filter(f => f !== fileId));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              disabled={doc.status === 'available'}
+                              title={doc.status === 'available' ? 'Import document first' : 'Select for AI Context'}
+                            />
+                         </div>
                          <div className={`w-10 h-10 rounded-xl bg-[var(--surface-high)] dark:bg-neutral-800 flex items-center justify-center text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition-all ${doc.status === 'available' ? 'animate-pulse text-amber-500' : ''}`}>
                            <FileText size={18} />
                          </div>
@@ -534,48 +695,140 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
         </AnimatePresence>
       </div>
 
-      {/* Upload Sources Modal */}
+      {/* Add Sources Modal — Unified with General Notebook */}
       <AnimatePresence>
         {showUploadModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center"
+            onClick={() => setShowUploadModal(false)}
+          >
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowUploadModal(false)}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative bg-[var(--surface-low)] w-full max-w-lg rounded-3xl border border-[var(--border)] shadow-2xl p-8"
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="relative bg-[var(--surface-low)] rounded-t-3xl sm:rounded-3xl shadow-2xl border border-[var(--border)] w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-xl font-bold text-[var(--text-primary)]">Add Case Sources</h3>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">Upload relevant legal filings or research notes.</p>
-                </div>
-                <button onClick={() => setShowUploadModal(false)} className="p-2 hover:bg-[var(--surface-high)] rounded-full text-[var(--text-muted)]">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
+                <h2 className="text-base font-semibold text-[var(--text-primary)] text-center flex-1">
+                  Add source: Upload files, paste URL or text
+                </h2>
+                <button
+                  onClick={() => setShowUploadModal(false)}
+                  className="p-2 hover:bg-[var(--surface-high)] rounded-xl text-[var(--text-muted)]"
+                >
                   <X size={20} />
                 </button>
               </div>
 
-              <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-[var(--border)] rounded-2xl bg-[var(--surface-high)] hover:bg-[var(--accent-soft)] hover:border-[var(--accent)] transition-all cursor-pointer group">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <div className="w-12 h-12 bg-[var(--accent-soft)] rounded-xl flex items-center justify-center text-[var(--accent)] mb-4 group-hover:scale-110 transition-transform">
-                    <Upload size={24} />
-                  </div>
-                  <p className="text-sm font-bold text-[var(--text-primary)]">Click or drag files to upload</p>
-                  <p className="text-[10px] text-[var(--text-muted)] mt-1 uppercase tracking-widest font-bold">PDF, DOCX, MD, OR IMAGE</p>
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* 1. Upload files */}
+                <div>
+                  <p className="text-xs font-medium text-[var(--text-secondary)] mb-2 flex items-center gap-2">
+                    <Upload size={14} /> Upload files
+                  </p>
+                  <label
+                    className={`flex flex-col items-center justify-center gap-3 w-full min-h-[148px] py-5 px-4 rounded-2xl border-2 border-dashed transition-colors ${
+                      fileUploading
+                        ? 'border-blue-200 bg-blue-50/70 cursor-wait'
+                        : 'border-[var(--border)] bg-[var(--surface-high)] hover:bg-[var(--accent-soft)] hover:border-[var(--accent)] cursor-pointer'
+                    }`}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer.files?.length) {
+                        uploadFiles(e.dataTransfer.files);
+                      }
+                    }}
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-[var(--accent-soft)] border border-[var(--border)] flex items-center justify-center shadow-sm">
+                      {fileUploading ? <Loader2 size={22} className="animate-spin text-[var(--accent)]" /> : <Upload size={22} className="text-[var(--accent)]" />}
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        {fileUploading ? 'Processing...' : 'Click or drag files here'}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        PDF, DOCX, MD, Images · Supports multiple files
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      multiple
+                      accept=".pdf,.docx,.pptx,.png,.jpg,.jpeg,.mp4,.md"
+                      onChange={(e) => {
+                        if (e.target.files?.length) {
+                          uploadFiles(e.target.files);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
                 </div>
-                <input
-                  type="file"
-                  className="hidden"
-                  multiple
-                  onChange={(e) => e.target.files && uploadFiles(e.target.files)}
-                />
-              </label>
+
+                {/* 2. Website URL import */}
+                <div className="border-t border-[var(--border)] pt-5">
+                  <p className="text-xs font-medium text-[var(--text-secondary)] mb-2 flex items-center gap-2">
+                    <Globe size={14} /> Website
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={introduceUrl}
+                      onChange={(e) => { setIntroduceUrl(e.target.value); setIntroduceUrlError(''); setIntroduceUrlSuccess(''); }}
+                      placeholder="https://..."
+                      className="flex-1 px-3 py-2 border border-[var(--border)] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[var(--accent)] bg-[var(--surface-high)] text-[var(--text-primary)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleImportUrlAsSource}
+                      disabled={introduceUrlLoading || !introduceUrl.trim()}
+                      className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 shrink-0 flex items-center gap-2"
+                    >
+                      {introduceUrlLoading ? 'Parsing...' : 'Parse URL'}
+                    </button>
+                  </div>
+                  {introduceUrlError && <p className="text-xs text-red-500 mt-1">{introduceUrlError}</p>}
+                  {introduceUrlSuccess && <p className="text-xs text-green-600 mt-1">{introduceUrlSuccess}</p>}
+                  <p className="text-xs text-[var(--text-muted)] mt-1">Extracts text from URL and indexes it</p>
+                </div>
+
+                {/* 3. Paste text */}
+                <div className="border-t border-[var(--border)] pt-5">
+                  <p className="text-xs font-medium text-[var(--text-secondary)] mb-2 flex items-center gap-2">
+                    <Type size={14} /> Paste text
+                  </p>
+                  <textarea
+                    value={introduceText}
+                    onChange={(e) => { setIntroduceText(e.target.value); setIntroduceTextError(''); setIntroduceTextSuccess(''); }}
+                    placeholder="Paste text here..."
+                    rows={4}
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[var(--accent)] resize-none bg-[var(--surface-high)] text-[var(--text-primary)]"
+                  />
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-xs text-[var(--text-muted)]">Added as .md source</span>
+                    <button
+                      type="button"
+                      onClick={handleAddTextSource}
+                      disabled={introduceTextLoading || !introduceText.trim()}
+                      className="px-4 py-2 rounded-xl bg-neutral-800 text-white text-sm font-medium hover:bg-neutral-900 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {introduceTextLoading ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                  {introduceTextError && <p className="text-xs text-red-500 mt-1">{introduceTextError}</p>}
+                  {introduceTextSuccess && <p className="text-xs text-green-600 mt-1">{introduceTextSuccess}</p>}
+                </div>
+              </div>
             </motion.div>
           </div>
         )}

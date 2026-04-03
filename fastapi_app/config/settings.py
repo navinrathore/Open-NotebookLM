@@ -91,3 +91,9 @@ class AppSettings(BaseSettings):
 
 # Global configuration instance
 settings = AppSettings()
+
+# Export critical keys to os.environ so legacy components using os.getenv() work correctly
+for key in ["DEFAULT_LLM_API_KEY", "HF_TOKEN", "DF_API_KEY", "DEFAULT_LLM_API_URL"]:
+    val = getattr(settings, key, None)
+    if val and not os.environ.get(key):
+        os.environ[key] = str(val)

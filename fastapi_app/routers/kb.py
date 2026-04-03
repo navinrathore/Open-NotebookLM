@@ -895,6 +895,10 @@ async def chat_with_kb_stream(
             llm_base_url = req.chat_api_url or settings.DEFAULT_LLM_API_URL
             llm_model = req.model or settings.KB_CHAT_MODEL
 
+            # Log API configuration for debugging (masked)
+            masked_key = f"{llm_api_key[:6]}...{llm_api_key[-4:]}" if llm_api_key and len(llm_api_key) > 10 else "MISSING"
+            log.info(f"[chat_with_kb_stream] Using URL: {llm_base_url}, Model: {llm_model}, Key: {masked_key}")
+
             client = AsyncOpenAI(
                 api_key=llm_api_key,
                 base_url=llm_base_url,

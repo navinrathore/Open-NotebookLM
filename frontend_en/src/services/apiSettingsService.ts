@@ -25,7 +25,12 @@ export function getApiSettings(userId: string | null): ApiSettings | null {
     const key = userId ? `${STORAGE_KEY_PREFIX}${userId}` : `${STORAGE_KEY_PREFIX}global`;
     const stored = localStorage.getItem(key);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      // Strip out the broken proxy URLs from legacy sessions
+      if (parsed.apiUrl && (parsed.apiUrl.includes('apiyi.com') || parsed.apiUrl.includes('123.129.219'))) {
+         parsed.apiUrl = DEFAULT_LLM_API_URL;
+      }
+      return parsed;
     }
   } catch (err) {
     console.error('Failed to load API settings:', err);

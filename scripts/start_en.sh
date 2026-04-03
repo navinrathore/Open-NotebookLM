@@ -18,6 +18,9 @@ pkill -9 -f "vite.*--port $FRONTEND_PORT" 2>/dev/null
 # Activate conda and start backend
 echo "Starting backend on port $PORT..."
 source /home/navin/work/packages/miniconda3/bin/activate opennotebook
+set -a
+[ -f fastapi_app/.env ] && source fastapi_app/.env
+set +a
 nohup python -m uvicorn fastapi_app.main:app --host 0.0.0.0 --port $PORT > logs/backend.log 2>&1 &
 
 # Start frontend
