@@ -4,7 +4,7 @@ import {
   ChevronLeft, Scale, Calendar, User, Briefcase, 
   FileText, MessageSquare, ExternalLink, Download,
   Clock, Info, Shield, Hash, Send, Bot, User as UserIcon, Loader2,
-  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload, Globe, Type, MoreVertical, Trash2
+  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload, Globe, Type, MoreVertical, Trash2, RefreshCw
 } from 'lucide-react';
 import { Case, CaseDocument } from '../types/case';
 import { apiFetch } from '../config/api';
@@ -41,6 +41,7 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
   const [introduceTextSuccess, setIntroduceTextSuccess] = useState('');
   const [activeMenuDocId, setActiveMenuDocId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<CaseDocument | null>(null);
+  const [reindexLoading, setReindexLoading] = useState(false);
   
   // Three-column layout state
   const [leftPanelWidth, setLeftPanelWidth] = useState(380);
@@ -141,6 +142,27 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
       console.error('Failed to fetch documents:', err);
     } finally {
       setLoadingDocs(false);
+    }
+  };
+
+  const handleReindex = async () => {
+    if (!window.confirm("Re-indexing will refresh all AI context with current chunking settings. This may take a moment. Proceed?")) return;
+    try {
+      setReindexLoading(true);
+      await apiFetch('/api/v1/kb/reindex', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notebook_id: caseItem.notebook_id,
+          email: user?.email || user?.id || 'local',
+          notebook_title: caseItem.case_title || caseItem.case_number || ''
+        }),
+      });
+      await fetchDocuments();
+    } catch (err) {
+      console.error('Re-index failed:', err);
+    } finally {
+      setReindexLoading(false);
     }
   };
 
@@ -985,6 +1007,23 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
                   {introduceTextError && <p className="text-xs text-red-500 mt-1">{introduceTextError}</p>}
                   {introduceTextSuccess && <p className="text-xs text-green-600 mt-1">{introduceTextSuccess}</p>}
                 </div>
+              </div>
+
+              {/* Utility Footer (Re-index) */}
+              <div className="px-6 py-4 border-t border-[var(--border)] bg-amber-50/50 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest leading-none">Development Tools</p>
+                  <p className="text-[9px] text-amber-600/70 mt-1">Rebuild index with latest settings</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleReindex}
+                  disabled={reindexLoading || syncLoading || fileUploading}
+                  className="px-3 py-1.5 rounded-lg border border-amber-200 bg-white text-amber-700 text-[10px] font-bold hover:bg-amber-100 hover:border-amber-300 transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
+                >
+                  {reindexLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  RE-INDEX ALL AI SOURCES
+                </button>
               </div>
             </motion.div>
           </div>

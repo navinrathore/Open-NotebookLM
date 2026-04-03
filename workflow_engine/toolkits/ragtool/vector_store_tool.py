@@ -24,11 +24,16 @@ from workflow_engine.logger import get_logger
 log = get_logger(__name__)
 
 
-def _chunk_text(text: str, chunk_size: int = 500, chunk_overlap: int = 80) -> List[str]:
+def _chunk_text(text: str, chunk_size: Optional[int] = None, chunk_overlap: Optional[int] = None) -> List[str]:
     """
-    Chunk text using LangChain RecursiveCharacterTextSplitter; if not installed, returns an empty list, 
-    allowing the caller to fall back to simple chunking.
+    Chunk text using LangChain RecursiveCharacterTextSplitter.
+    Prioritizes passed parameters, then environment variables, then defaults (1000/200).
     """
+    if chunk_size is None:
+        chunk_size = int(os.getenv("CHUNK_SIZE", "1000"))
+    if chunk_overlap is None:
+        chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "200"))
+        
     try:
         from langchain_text_splitters import RecursiveCharacterTextSplitter
     except ImportError:
@@ -104,8 +109,8 @@ class VectorStoreManager:
             self.multimodal_api_url = self.embedding_api_url
         
         # Local Embedding Engine configuration (from .env)
-        # USE_EMBEDDING_LIBRARY=1 activates the local SentenceTransformers CPU-mode
         self.use_local_library_embedding = int(os.getenv("USE_EMBEDDING_LIBRARY", "0"))
+        self.embedding_device = os.getenv("EMBEDDING_DEVICE", "cpu")
         self._local_embedding_model_instance = None # Lazy loaded
         
         # Directories
@@ -282,10 +287,10 @@ class VectorStoreManager:
             try:
                 if self._local_embedding_model_instance is None:
                     from sentence_transformers import SentenceTransformer
-                    log.info(f"Loading local embedding model: {self.embedding_model}")
-                    self._local_embedding_model_instance = SentenceTransformer(self.embedding_model)
+                    log.info(f"Loading local embedding model: {self.embedding_model} on {self.embedding_device}")
+                    self._local_embedding_model_instance = SentenceTransformer(self.embedding_model, device=self.embedding_device)
                 
-                # Encode on CPU
+                # Encode on hardware device
                 vecs = self._local_embedding_model_instance.encode(texts)
                 arr = np.asarray(vecs, dtype=np.float32)
                 if arr.ndim == 1:
@@ -375,7 +380,7 @@ class VectorStoreManager:
             raise
         self.meta_data.extend(meta_list)
 
-    async def process_file(self, file_path: str, description: Optional[str] = None) -> str:
+    async def process_file(self, file_path: Union[str, Path], description: Optional[str] = None, file_id: Optional[str] = None) -> str:
         """
         Main entry point to process a file.
         Returns the file ID in the manifest.
@@ -384,7 +389,8 @@ class VectorStoreManager:
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        file_id = str(uuid.uuid4())
+        if not file_id:
+            file_id = str(uuid.uuid4())
         ext = file_path.suffix.lower()
         
         file_record = {
@@ -753,9 +759,10 @@ async def process_knowledge_base_files(
     for item in file_list:
         path = item.get("path")
         desc = item.get("description")
+        f_id = item.get("id")
         if path:
             try:
-                await manager.process_file(path, desc)
+                await manager.process_file(path, desc, file_id=f_id)
             except Exception as e:
                 log.error(f"Failed to process {path}: {e}")
                 

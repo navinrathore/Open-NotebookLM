@@ -187,6 +187,68 @@ async def create_embedding(
         log.error(f"Vector ingestion failed: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Vector ingestion failed, please check file format or contact administrator")
 
+class ReindexRequest(BaseModel):
+    notebook_id: str
+    email: Optional[str] = "local"
+    notebook_title: Optional[str] = "General"
+
+@router.post("/reindex")
+async def reindex_all_sources(data: ReindexRequest):
+    """
+    Rebuild the entire vector store for a notebook.
+    This wipes the current index and re-processes all files in the manifest 
+    using the current CHUNK_SIZE/OVERLAP settings.
+    """
+    try:
+        from fastapi_app.notebook_paths import get_notebook_paths
+        nb_paths = get_notebook_paths(data.notebook_id, data.notebook_title, data.email)
+        base_dir = nb_paths.root
+        
+        # 1. Load existing manifest
+        manager = VectorStoreManager(base_dir=str(base_dir))
+        manifest = manager.manifest
+        files = manifest.get("files", [])
+        
+        if not files:
+            return {"success": True, "message": "No files to re-index"}
+            
+        # 2. Clear current vector store (Wipe index and meta)
+        if manager.faiss_index_path.exists():
+            manager.faiss_index_path.unlink()
+        if manager.faiss_meta_path.exists():
+            manager.faiss_meta_path.unlink()
+        manager.index = None
+        manager.meta_data = []
+
+        # 3. Collect ALL files to re-process
+        reprocess_list = []
+        for f in files:
+            path = f.get("original_path")
+            if path and Path(path).exists():
+                reprocess_list.append({"path": path, "id": f.get("id")})
+
+        if not reprocess_list:
+             return {"success": True, "message": "No physical files found for re-indexing"}
+
+        # 4. Trigger bulk re-processing
+        local_model = os.getenv("LOCAL_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        await process_knowledge_base_files(
+            file_list=reprocess_list,
+            base_dir=str(base_dir),
+            api_url=manager.embedding_api_url,
+            api_key=manager.api_key,
+            model_name=local_model
+        )
+        
+        return {
+            "success": True, 
+            "message": f"Successfully re-indexed {len(reprocess_list)} files with current parameters."
+        }
+    except Exception as e:
+        log.error(f"Re-indexing failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/list")
 async def list_kb_files(
     email: Optional[str] = None,
