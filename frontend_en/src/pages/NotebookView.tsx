@@ -218,6 +218,9 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
   const [loadingSetId, setLoadingSetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<any>(null);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [isQuestionsLoading, setIsQuestionsLoading] = useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   // Three-column draggable width (left / right, middle flex auto)
   const [leftPanelWidth, setLeftPanelWidth] = useState(256);
@@ -575,6 +578,22 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
     }
   };
 
+  const fetchSuggestedQuestions = async () => {
+    if (!notebook?.id) return;
+    setIsQuestionsLoading(true);
+    try {
+      const res = await apiFetch(`/api/v1/questions/suggest?notebook_id=${encodeURIComponent(notebook.id)}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.questions)) {
+        setSuggestedQuestions(data.questions);
+      }
+    } catch (err) {
+      console.error('Failed to fetch suggested questions:', err);
+    } finally {
+      setIsQuestionsLoading(false);
+    }
+  };
+
   // Force refresh sources list (reset cache)
   const refreshVectorList = async () => {
     lastFetchedNotebookIdForSources.current = null;
@@ -783,6 +802,7 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
     if (notebook?.id) {
       loadFromApi();
+      fetchSuggestedQuestions();
     } else {
       loadFromStorage();
     }
@@ -945,6 +965,8 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
         : [];
       setFiles(mappedFiles);
       setSelectedIds(new Set(mappedFiles.map(f => f.id)));
+      // Refresh suggested questions whenever file list changes significantly
+      if (mappedFiles.length > 0) fetchSuggestedQuestions();
     } catch (err) {
       console.error('Failed to fetch files:', err);
     }
@@ -2764,9 +2786,47 @@ const NotebookView = ({ notebook, onBack }: { notebook: any, onBack: () => void 
 
           {chatSubView === 'current' && (
             <div className="px-6 pb-8 shrink-0">
+              <div className="max-w-[800px] mx-auto mb-3">
+                <div className="flex items-center gap-2 mb-2 overflow-x-auto no-scrollbar py-1">
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider shrink-0 border border-amber-100 dark:border-amber-800/50">
+                    <Sparkles size={12} />
+                    <span>AI Suggested</span>
+                  </div>
+                  {isQuestionsLoading ? (
+                    <div className="flex gap-2">
+                       {[1, 2, 3].map(i => <div key={i} className="h-7 w-24 bg-gray-100 dark:bg-gray-800 animate-pulse rounded-full" />)}
+                    </div>
+                  ) : (
+                    <>
+                      {suggestedQuestions.map((q, i) => (
+                        <motion.button
+                          key={i}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            setInputMsg(prev => prev ? `${prev}\n${q}` : q);
+                            inputRef.current?.focus();
+                          }}
+                          className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 hover:border-amber-300 dark:hover:border-amber-600 whitespace-nowrap shadow-sm transition-all"
+                        >
+                          {q}
+                        </motion.button>
+                      ))}
+                      <button 
+                        onClick={fetchSuggestedQuestions}
+                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-400 shrink-0 transition-colors"
+                        title="Refresh Questions"
+                      >
+                         <Zap size={14} className={isQuestionsLoading ? 'animate-spin' : ''} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
               <div className="max-w-[800px] mx-auto relative">
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-low)] shadow-2xl transition-all duration-300 group focus-within:border-[var(--accent)] focus-within:ring-4 focus-within:ring-[var(--accent)]/10">
                   <input
+                    ref={inputRef}
                     type="text"
                     value={inputMsg}
                     onChange={e => setInputMsg(e.target.value)}
