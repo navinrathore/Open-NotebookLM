@@ -1894,9 +1894,7 @@ class PromptWriterPrompt:
     - When writing the text part of the prompt, you need to refer to existing prompt examples and follow your output format requirements. It is best to integrate key elements from existing prompt examples under your format requirements.
     - The code file you generate needs to include an __all__ variable to specify the classes exported from the file for easy import by other files.
     """
-
-    
-    task_prompt_for_prompt_writer = """
+  task_prompt_for_prompt_writer = """
     Targeting the following operator code:
     {operator_code}
     

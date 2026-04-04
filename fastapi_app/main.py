@@ -40,7 +40,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from fastapi_app.routers import auth, data_extract, files, kb, kb_embedding, paper2drawio, paper2ppt
+from fastapi_app.routers import auth, data_extract, files, kb, kb_embedding, paper2drawio, paper2ppt, questions
 # LawNidhi Integration routers (isolated in separate files)
 from fastapi_app.routers import cases as lawnidhi_cases
 from fastapi_app.routers import scrapers as lawnidhi_scrapers
@@ -481,6 +481,7 @@ def create_app() -> FastAPI:
     app.include_router(paper2drawio.router, prefix="/api/v1", tags=["Paper2Drawio"])
     app.include_router(paper2ppt.router, prefix="/api/v1", tags=["Paper2PPT"])
     app.include_router(auth.router, prefix="/api/v1", tags=["Auth"])
+    app.include_router(questions.router, prefix="/api/v1", tags=["Questions"])
 
     # LawNidhi Integration routers (case management, scraping, calendar, reports)
     app.include_router(lawnidhi_cases.router, prefix="/api/v1", tags=["Cases (LawNidhi)"])

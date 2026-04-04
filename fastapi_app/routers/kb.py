@@ -7,7 +7,7 @@ import subprocess
 import time
 from pathlib import Path
 from urllib.parse import urlparse, unquote
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Body
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Body, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict, Any
 from openai import AsyncOpenAI
@@ -31,7 +31,7 @@ from fastapi_app.source_manager import SourceManager
 from fastapi_app.services.fast_research_service import fast_research_search
 from fastapi_app.services.deep_research_report_service import generate_report_from_search
 from workflow_engine.toolkits.research_tools import fetch_page_text
-from workflow_engine.workflow.wf_intelligent_qa import prepare_parallel_file_analyses, build_intelligent_qa_prompt
+from workflow_engine.promptstemplates.prompt_template import PromptsTemplateGenerator
 from workflow_engine.promptstemplates.resources.pt_qa_agent_repo import KbPromptAgent as KbPromptAgentPrompts
 
 router = APIRouter(prefix="/kb", tags=["Knowledge Base"])
@@ -339,6 +339,7 @@ async def upload_kb_file(
     user_id: str = Form(...),
     notebook_id: Optional[str] = Form(None),
     notebook_title: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Upload a file to the notebook's knowledge base directory.
@@ -425,8 +426,7 @@ async def upload_kb_file(
             )
         except Exception as e:
             log.warning("[upload] failed to write JSON record: %s", e)
-
-        return {
+        response_data = {
             "success": True,
             "filename": filename,
             "file_size": os.path.getsize(source_info.original_path),
@@ -435,6 +435,22 @@ async def upload_kb_file(
             "file_type": file.content_type,
             "embedded": embedded,
         }
+        
+        # Trigger suggested questions update
+        from fastapi_app.services.suggest_questions import update_suggested_questions_task
+        if background_tasks:
+            background_tasks.add_task(
+                update_suggested_questions_task,
+                notebook_id,
+                notebook_title or "",
+                email,
+                user_id,
+                settings.DEFAULT_LLM_API_URL,
+                settings.DEFAULT_LLM_API_KEY or settings.HF_TOKEN,
+                settings.KB_CHAT_MODEL
+            )
+            
+        return response_data
 
     except Exception as e:
         print(f"Error uploading file: {e}")
@@ -477,6 +493,7 @@ async def add_text_source(
     notebook_title: Optional[str] = Body(None, embed=True),
     title: str = Body("Direct Entry", embed=True),
     content: str = Body(..., embed=True),
+    background_tasks: BackgroundTasks = None,
 ) -> Dict[str, Any]:
     """
     Save plain text as a .md file within the notebook and use as source. Used for "Direct Entry".
@@ -533,7 +550,7 @@ async def add_text_source(
     except Exception as e:
         log.warning("[add-text-source] failed to write JSON record: %s", e)
 
-    return {
+    response_data = {
         "success": True,
         "filename": source_info.original_path.name,
         "file_size": source_info.original_path.stat().st_size,
@@ -541,6 +558,22 @@ async def add_text_source(
         "static_url": static_path,
         "id": f"file-{source_info.original_path.name}",
     }
+    
+    # Trigger suggested questions update
+    from fastapi_app.services.suggest_questions import update_suggested_questions_task
+    if background_tasks:
+        background_tasks.add_task(
+            update_suggested_questions_task,
+            notebook_id,
+            notebook_title or "",
+            email,
+            user_id or "local",
+            settings.DEFAULT_LLM_API_URL,
+            settings.DEFAULT_LLM_API_KEY or settings.HF_TOKEN,
+            settings.KB_CHAT_MODEL
+        )
+        
+    return response_data
 
 
 @router.post("/import-url-as-source")
@@ -550,6 +583,7 @@ async def import_url_as_source(
     user_id: Optional[str] = Body(None, embed=True),
     notebook_title: Optional[str] = Body(None, embed=True),
     url: str = Body(..., embed=True),
+    background_tasks: BackgroundTasks = None,
 ) -> Dict[str, Any]:
     """
     Fetch URL page text and save as .md file, using as source.
@@ -623,7 +657,7 @@ async def import_url_as_source(
     except Exception as e:
         log.warning("[import-url-as-source] failed to write JSON record: %s", e)
 
-    return {
+    response_data = {
         "success": True,
         "filename": source_info.original_path.name,
         "file_size": source_info.original_path.stat().st_size,
@@ -631,6 +665,22 @@ async def import_url_as_source(
         "static_url": static_path,
         "id": f"file-{source_info.original_path.name}",
     }
+    
+    # Trigger suggested questions update
+    from fastapi_app.services.suggest_questions import update_suggested_questions_task
+    if background_tasks:
+        background_tasks.add_task(
+            update_suggested_questions_task,
+            notebook_id,
+            notebook_title or "",
+            email,
+            user_id or "local",
+            settings.DEFAULT_LLM_API_URL,
+            settings.DEFAULT_LLM_API_KEY or settings.HF_TOKEN,
+            settings.KB_CHAT_MODEL
+        )
+        
+    return response_data
 
 
 @router.delete("/delete")
@@ -777,13 +827,8 @@ async def chat_with_kb(
 
         state = IntelligentQAState(request=req)
         
-        # Run workflow via registry (统一使用 run_workflow)
+        # Run workflow via registry
         result_state = await run_workflow("intelligent_qa", state)
-        
-        # graph.ainvoke returns the final state dict or state object depending on implementation.
-        # LangGraph usually returns dict. But our GenericGraphBuilder wrapper might return state.
-        # GenericGraphBuilder compile returns a compiled graph.
-        # Let's check typical usage. usually await graph.ainvoke(state) returns dict.
         
         answer = ""
         file_analyses = []
@@ -798,7 +843,7 @@ async def chat_with_kb(
             source_preview_mapping = result_state.get("source_preview_mapping", {})
             source_reference_mapping = result_state.get("source_reference_mapping", {})
         else:
-            answer = getattr(result_state, "answer", "")
+            answer = getattr(result_state, "answer", str(result_state))
             file_analyses = getattr(result_state, "file_analyses", [])
             source_mapping = getattr(result_state, "source_mapping", {})
             source_preview_mapping = getattr(result_state, "source_preview_mapping", {})
@@ -817,6 +862,75 @@ async def chat_with_kb(
             "source_preview_mapping": source_preview_mapping_str,
             "source_reference_mapping": source_reference_mapping_str,
         }
+
+    except Exception as e:
+        log.error(f"[chat_with_kb] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/suggest-questions")
+async def suggest_questions(
+    notebook_id: str = Body(..., embed=True),
+    email: str = Body(..., embed=True),
+    model: str = Body(settings.KB_CHAT_MODEL, embed=True),
+):
+    """
+    Generate 3-5 suggested questions based on the notebook's sources (NotebookLM-style).
+    """
+    from fastapi_app.kb_records import get_source_records
+    
+    try:
+        records = get_source_records(email, notebook_id)
+        if not records:
+            return {"questions": ["Upload documents to see suggested questions."]}
+
+        # Sample context from the first 2-3 documents
+        context_sample = ""
+        for rec in records[:3]:
+            file_path = Path(rec.get("file_path"))
+            if not file_path.exists():
+                continue
+            
+            try:
+                # Basic sampling: read first 2500 chars
+                if file_path.suffix.lower() == ".pdf":
+                    # Try to read from MinerU cache if available
+                    content = _read_mineru_md_if_cached(file_path, email, notebook_id)
+                    if not content:
+                        # Fallback: basic PyMuPDF read
+                        with fitz.open(file_path) as doc:
+                            content = " ".join([page.get_text() for page in doc[:2]])
+                else:
+                    content = file_path.read_text(encoding="utf-8", errors="ignore")
+                
+                context_sample += f"\n--- Source: {rec.get('file_name')} ---\n{content[:2500]}\n"
+            except Exception as e:
+                log.warning(f"[suggest-questions] Failed to sample {file_path}: {e}")
+
+        if not context_sample.strip():
+            return {"questions": []}
+
+        # Render prompt
+        gen = PromptsTemplateGenerator(output_language="English")
+        system_p = gen.get_system_prompt("suggested_questions")
+        task_p = gen.get_task_prompt("suggested_questions", context_sample=context_sample)
+
+        # Call LLM
+        client = AsyncOpenAI(base_url=settings.DEFAULT_LLM_API_URL, api_key=settings.DEFAULT_LLM_API_KEY)
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_p},
+                {"role": "user", "content": task_p}
+            ],
+            response_format={"type": "json_object"}
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        return {"questions": result.get("questions", [])[:5]}
+
+    except Exception as e:
+        log.error(f"[suggest-questions] Error: {e}")
+        return {"questions": []}
 
     except HTTPException:
         raise
