@@ -57,12 +57,12 @@ class ColorFormatter(logging.Formatter):
         lineno = record.lineno
         message = record.getMessage()
 
-        # 获取上下文信息
+        # Get context information
         req_id = request_id_var.get()
         user_email = user_email_var.get()
         user_id = user_id_var.get()
 
-        # 构建上下文字符串
+        # Build context string
         context_parts = []
         if req_id:
             context_parts.append(f"req={req_id[:8]}")

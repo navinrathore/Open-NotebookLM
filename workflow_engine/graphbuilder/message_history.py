@@ -15,46 +15,46 @@ from langgraph.graph.message import add_messages, REMOVE_ALL_MESSAGES
 from langchain_core.messages.utils import trim_messages
 import hashlib
 
-# ==================== 核心封装类 ====================
+# ==================== Core Wrapper Class ====================
 @dataclass
 class AdvancedMessageHistory:
     """
-    高级消息历史管理器 - 封装 LangGraph 原生能力
+    Advanced Message History Manager - Encapsulates LangGraph native capabilities.
     
-    功能：
-    1. 消息合并（多源、去重）
-    2. 消息过滤（类型、时间、内容）
-    3. 消息清理（批量、压缩）
-    4. 统一接口（屏蔽底层复杂性）
+    Features:
+    1. Message merging (multi-source, deduplication)
+    2. Message filtering (type, time, content)
+    3. Message cleaning (bulk, compression)
+    4. Unified interface (hides underlying complexity)
     """
     
-    # ===== 核心配置 =====
+    # ===== Core Configuration =====
     checkpointer: BaseCheckpointSaver = field(default_factory=MemorySaver)
     thread_id: str = "default"
     
-    # ===== 历史管理配置 =====
+    # ===== History Management Configuration =====
     max_messages: int = 100
     max_tokens: Optional[int] = None
-    max_age_hours: Optional[int] = None  # 消息最大保留时间
+    max_age_hours: Optional[int] = None  # Maximum message retention time
     
-    # ===== 消息处理配置 =====
-    auto_deduplicate: bool = True  # 自动去重
-    keep_system_messages: bool = True  # 始终保留系统消息
+    # ===== Message Processing Configuration =====
+    auto_deduplicate: bool = True  # Automatic deduplication
+    keep_system_messages: bool = True  # Always keep system messages
     
-    # ===== 内部缓存 =====
+    # ===== Internal Cache =====
     _message_cache: Dict[str, BaseMessage] = field(default_factory=dict, init=False)
     _metadata_cache: Dict[str, Dict[str, Any]] = field(default_factory=dict, init=False)
     
     def __post_init__(self):
-        """初始化配置"""
+        """Initialize configuration"""
         self._ensure_checkpointer()
     
     def _ensure_checkpointer(self):
-        """确保 Checkpointer 已初始化"""
+        """Ensure Checkpointer is initialized"""
         if self.checkpointer is None:
             self.checkpointer = MemorySaver()
     
-    # ==================== 核心方法：消息操作 ====================
+    # ==================== Core Methods: Message Operations ====================
     
     def add_messages(
         self,
@@ -63,12 +63,12 @@ class AdvancedMessageHistory:
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """
-        添加消息到历史（支持去重）
+        Add messages to history (supports deduplication).
         
         Args:
-            messages: 要添加的消息列表
-            deduplicate: 是否去重（None 使用默认配置）
-            metadata: 消息元数据
+            messages: List of messages to add
+            deduplicate: Whether to deduplicate (None uses default config)
+            metadata: Message metadata
         
         Example:
             >>> history.add_messages([
@@ -78,19 +78,19 @@ class AdvancedMessageHistory:
         """
         deduplicate = deduplicate if deduplicate is not None else self.auto_deduplicate
         
-        # 去重处理
+        # Deduplication processing
         if deduplicate:
             messages = self._deduplicate_messages(messages)
         
-        # 添加元数据
+        # Add metadata
         if metadata:
             for msg in messages:
                 msg_id = self._get_message_id(msg)
                 self._metadata_cache[msg_id] = metadata
         
-        # 使用 LangGraph 原生机制保存
-        # 这里我们不直接使用 checkpointer，而是返回更新指令
-        # 让 LangGraph 的状态管理系统处理
+        # Use LangGraph native mechanism to save.
+        # Here we don't use checkpointer directly, but return update instructions
+        # to let LangGraph's state management system handle it.
         return messages
     
     def merge_histories(
@@ -99,14 +99,14 @@ class AdvancedMessageHistory:
         strategy: Literal["chronological", "interleave", "priority"] = "chronological"
     ) -> List[BaseMessage]:
         """
-        合并多个消息历史
+        Merge multiple message histories.
         
         Args:
-            histories: 多个消息历史列表
-            strategy: 合并策略
-                - chronological: 按时间顺序
-                - interleave: 交替合并
-                - priority: 按优先级（第一个列表优先）
+            histories: Multiple lists of message histories
+            strategy: Merge strategy
+                - chronological: By time order
+                - interleave: Alternate merging
+                - priority: By priority (first list has priority)
         
         Example:
             >>> history1 = [HumanMessage(content="Q1"), AIMessage(content="A1")]
@@ -134,17 +134,17 @@ class AdvancedMessageHistory:
         custom_filter: Optional[Callable[[BaseMessage], bool]] = None
     ) -> List[BaseMessage]:
         """
-        过滤消息
+        Filter messages.
         
         Args:
-            messages: 要过滤的消息列表
-            message_types: 保留的消息类型（如 [HumanMessage, AIMessage]）
-            content_pattern: 内容匹配模式（正则表达式）
-            time_range: 时间范围 (start, end)
-            custom_filter: 自定义过滤函数
+            messages: List of messages to filter
+            message_types: Message types to keep (e.g., [HumanMessage, AIMessage])
+            content_pattern: Content matching pattern (regex)
+            time_range: Time range (start, end)
+            custom_filter: Custom filter function
         
         Example:
-            >>> # 只保留人类和 AI 消息
+            >>> # Keep only Human and AI messages
             >>> filtered = manager.filter_messages(
             ...     messages,
             ...     message_types=[HumanMessage, AIMessage]
@@ -152,21 +152,21 @@ class AdvancedMessageHistory:
         """
         filtered = messages
         
-        # 按类型过滤
+        # Filter by type
         if message_types:
             filtered = [m for m in filtered if type(m) in message_types]
         
-        # 按内容过滤
+        # Filter by content
         if content_pattern:
             import re
             pattern = re.compile(content_pattern)
             filtered = [m for m in filtered if pattern.search(m.content)]
         
-        # 按时间过滤
+        # Filter by time
         if time_range:
             filtered = self._filter_by_time(filtered, time_range)
         
-        # 自定义过滤
+        # Custom filter
         if custom_filter:
             filtered = [m for m in filtered if custom_filter(m)]
         
@@ -181,14 +181,14 @@ class AdvancedMessageHistory:
         max_length: Optional[int] = None
     ) -> List[BaseMessage]:
         """
-        清理消息历史
+        Clean message history.
         
         Args:
-            messages: 要清理的消息列表
-            remove_duplicates: 移除重复消息
-            remove_empty: 移除空消息
-            compress_consecutive: 压缩连续的同类型消息
-            max_length: 最大保留数量
+            messages: List of messages to clean
+            remove_duplicates: Remove duplicate messages
+            remove_empty: Remove empty messages
+            compress_consecutive: Compress consecutive messages of the same type
+            max_length: Maximum number of messages to keep
         
         Example:
             >>> cleaned = manager.clean_messages(
@@ -199,21 +199,21 @@ class AdvancedMessageHistory:
         """
         result = list(messages)
         
-        # 移除空消息
+        # Remove empty messages
         if remove_empty:
             result = [m for m in result if m.content and m.content.strip()]
         
-        # 去重
+        # Deduplicate
         if remove_duplicates:
             result = self._deduplicate_messages(result)
         
-        # 压缩连续消息
+        # Compress consecutive messages
         if compress_consecutive:
             result = self._compress_consecutive_messages(result)
         
-        # 长度限制
+        # Length limitation
         if max_length and len(result) > max_length:
-            # 保留系统消息
+            # Keep system messages
             if self.keep_system_messages:
                 system_msgs = [m for m in result if isinstance(m, SystemMessage)]
                 other_msgs = [m for m in result if not isinstance(m, SystemMessage)]
@@ -230,12 +230,12 @@ class AdvancedMessageHistory:
         strategy: Literal["last", "first", "summary"] = "last"
     ) -> List[BaseMessage]:
         """
-        智能消息修剪（基于 LangGraph 的 trim_messages）
+        Smart message trimming (based on LangGraph's trim_messages).
         
         Args:
-            messages: 要修剪的消息列表
-            max_tokens: 最大 token 数
-            strategy: 修剪策略
+            messages: List of messages to trim
+            max_tokens: Maximum number of tokens
+            strategy: Trimming strategy
         
         Example:
             >>> trimmed = manager.trim_messages_smart(
@@ -250,32 +250,32 @@ class AdvancedMessageHistory:
             return messages
         
         if strategy == "summary":
-            # 使用摘要策略
+            # Use summary strategy
             return self._trim_with_summary(messages, max_tokens)
         else:
-            # 使用 LangGraph 原生 trim_messages
+            # Use LangGraph native trim_messages
             return trim_messages(
                 messages,
                 strategy=strategy,
                 max_tokens=max_tokens,
-                token_counter=len,  # 可替换为更精确的计数器
+                token_counter=len,  # Can be replaced with a more precise counter
                 start_on="human",
                 end_on=("human", "tool")
             )
     
-    # ==================== 辅助方法 ====================
+    # ==================== Helper Methods ====================
     
     def _get_message_id(self, message: BaseMessage) -> str:
-        """生成消息唯一 ID"""
+        """Generate a unique ID for a message."""
         if hasattr(message, 'id') and message.id:
             return message.id
         
-        # 基于内容生成 ID
+        # Generate ID based on content
         content = f"{message.type}:{message.content}"
         return hashlib.md5(content.encode()).hexdigest()
     
     def _deduplicate_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
-        """去重消息"""
+        """Deduplicate messages."""
         seen = set()
         result = []
         
@@ -288,7 +288,7 @@ class AdvancedMessageHistory:
         return result
     
     def _compress_consecutive_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
-        """压缩连续的同类型消息"""
+        """Compress consecutive messages of the same type."""
         if not messages:
             return []
         
@@ -299,7 +299,7 @@ class AdvancedMessageHistory:
             if type(msg) == type(current_group[0]):
                 current_group.append(msg)
             else:
-                # 合并当前组
+                # Merge current group
                 if len(current_group) > 1:
                     merged_content = "\n\n".join(m.content for m in current_group)
                     merged_msg = type(current_group[0])(content=merged_content)
@@ -309,7 +309,7 @@ class AdvancedMessageHistory:
                 
                 current_group = [msg]
         
-        # 处理最后一组
+        # Handle the last group
         if len(current_group) > 1:
             merged_content = "\n\n".join(m.content for m in current_group)
             merged_msg = type(current_group[0])(content=merged_content)
@@ -320,19 +320,19 @@ class AdvancedMessageHistory:
         return result
     
     def _merge_chronological(self, *histories: List[BaseMessage]) -> List[BaseMessage]:
-        """按时间顺序合并"""
+        """Merge by chronological order."""
         all_messages = []
         for history in histories:
             all_messages.extend(history)
         
-        # 假设消息有时间戳，否则保持原顺序
+        # Assume messages have timestamps, otherwise maintain original order
         return sorted(
             all_messages,
             key=lambda m: getattr(m, 'timestamp', datetime.now())
         )
     
     def _merge_interleave(self, *histories: List[BaseMessage]) -> List[BaseMessage]:
-        """交替合并"""
+        """Merge by interleaving."""
         result = []
         max_len = max(len(h) for h in histories)
         
@@ -344,7 +344,7 @@ class AdvancedMessageHistory:
         return result
     
     def _merge_priority(self, *histories: List[BaseMessage]) -> List[BaseMessage]:
-        """优先级合并（去重时保留第一个）"""
+        """Merge by priority (keep the first occurrence when deduplicating)."""
         result = []
         seen = set()
         
@@ -362,7 +362,7 @@ class AdvancedMessageHistory:
         messages: List[BaseMessage],
         time_range: tuple[datetime, datetime]
     ) -> List[BaseMessage]:
-        """按时间过滤"""
+        """Filter by time."""
         start, end = time_range
         return [
             m for m in messages
@@ -374,9 +374,9 @@ class AdvancedMessageHistory:
         messages: List[BaseMessage],
         max_tokens: int
     ) -> List[BaseMessage]:
-        """使用摘要策略修剪"""
-        # 这里可以集成 LangMem 的 SummarizationNode
-        # 简化版本：只保留最近的消息 + 一个摘要
+        """Trim using a summary strategy."""
+        # This could integrate LangMem's SummarizationNode
+        # Simplified version: keep only recent messages + a summary
         
         from langchain_core.messages.utils import count_tokens_approximately
         
@@ -385,12 +385,12 @@ class AdvancedMessageHistory:
         if current_tokens <= max_tokens:
             return messages
         
-        # 保留系统消息
+        # Keep system messages
         system_msgs = [m for m in messages if isinstance(m, SystemMessage)]
         other_msgs = [m for m in messages if not isinstance(m, SystemMessage)]
         
-        # 简单策略：保留最后的消息 + 摘要前面的内容
-        # 实际应该调用 LLM 生成摘要
+        # Simple strategy: keep the last 10 messages + summary of previous ones
+        # In practice, this should call an LLM to generate a summary.
         summary_content = f"[Earlier conversation summarized: {len(other_msgs) - 10} messages]"
         summary_msg = SystemMessage(content=summary_content)
         
@@ -405,67 +405,67 @@ class AdvancedMessageHistory:
         before: Optional[str] = None
     ) -> List[BaseMessage]:
         """
-        获取消息历史
+        Get message history.
         
         Args:
-            thread_id: 线程ID，如果为None则使用默认线程
-            limit: 限制返回的消息数量
-            before: 获取指定 checkpoint_id 之前的消息
+            thread_id: Thread ID, if None, use default thread
+            limit: Limit the number of messages returned
+            before: Get messages before the specified checkpoint_id
             
         Returns:
-            消息列表
+            List of messages
             
         Example:
-            >>> # 获取默认线程的所有消息
+            >>> # Get all messages for the default thread
             >>> messages = manager.get_messages()
             >>> 
-            >>> # 获取指定线程的最新10条消息
+            >>> # Get the latest 10 messages for a specified thread
             >>> messages = manager.get_messages(thread_id="session_1", limit=10)
         """
-        # 使用提供的 thread_id 或默认值
+        # Use provided thread_id or default value
         tid = thread_id or self.thread_id
         
-        # 构建配置
+        # Build configuration
         config = {"configurable": {"thread_id": tid}}
         
         try:
-            # 如果指定了 before，添加到配置中
+            # If before is specified, add it to the configuration
             if before:
                 config["configurable"]["checkpoint_id"] = before
             
-            # 从 checkpointer 获取最新状态
+            # Get latest state from checkpointer
             checkpoint = self.checkpointer.get(config)
             
             if checkpoint is None:
                 return []
             
-            # 从 checkpoint 中提取 messages
+            # Extract messages from checkpoint
             messages = []
             if hasattr(checkpoint, 'values'):
-                # checkpoint.values 是一个字典，包含完整状态
+                # checkpoint.values is a dictionary containing the full state
                 state = checkpoint.values
                 if isinstance(state, dict) and 'messages' in state:
                     messages = state['messages']
                 elif isinstance(state, dict):
-                    # 尝试从其他可能的键获取
+                    # Try to get from other possible keys
                     for key in ['message', 'msg', 'history']:
                         if key in state:
                             messages = state[key]
                             break
             
-            # 确保返回的是列表
+            # Ensure return is a list
             if not isinstance(messages, list):
                 messages = [messages] if messages else []
             
-            # 应用限制
+            # Apply limit
             if limit and len(messages) > limit:
-                messages = messages[-limit:]  # 取最新的 N 条
+                messages = messages[-limit:]  # Take the latest N messages
             
             return messages
             
         except Exception as e:
-            # 如果获取失败，返回空列表
-            # 在生产环境中应该记录日志
+            # If retrieval fails, return an empty list
+            # Logs should be recorded in production environments
             import logging
             logging.warning(f"Failed to get messages for thread {tid}: {e}")
             return []
@@ -477,15 +477,15 @@ class AdvancedMessageHistory:
         metadata: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
-        保存消息到 checkpointer
+        Save messages to checkpointer.
         
         Args:
-            messages: 要保存的消息列表
-            thread_id: 线程ID
-            metadata: 额外的元数据
+            messages: List of messages to save
+            thread_id: Thread ID
+            metadata: Additional metadata
             
         Returns:
-            是否保存成功
+            Whether saved successfully
             
         Example:
             >>> success = manager.save_messages([
@@ -497,14 +497,14 @@ class AdvancedMessageHistory:
         config = {"configurable": {"thread_id": tid}}
         
         try:
-            # 构建要保存的状态
+            # Build the state to save
             state = {"messages": messages}
             if metadata:
                 state["metadata"] = metadata
             
-            # 使用 checkpointer 的 put 方法保存
-            # 注意：不同的 checkpointer 实现可能有不同的接口
-            # 这里提供一个通用的实现
+            # Use checkpointer's put method to save
+            # Note: Different checkpointer implementations might have different interfaces
+            # Here we provide a general implementation
             from langgraph.checkpoint.base import Checkpoint
             
             checkpoint = Checkpoint(
@@ -523,16 +523,17 @@ class AdvancedMessageHistory:
             import logging
             logging.error(f"Failed to save messages for thread {tid}: {e}")
             return False
-    # 新增方法===========================================
+            
+    # New methods ===========================================
     def get_message_count(self, thread_id: Optional[str] = None) -> int:
         """
-        获取消息数量
+        Get the number of messages.
         
         Args:
-            thread_id: 线程ID
+            thread_id: Thread ID
             
         Returns:
-            消息数量
+            Number of messages
             
         Example:
             >>> count = manager.get_message_count("session_1")
@@ -547,20 +548,20 @@ class AdvancedMessageHistory:
         before: Optional[datetime] = None
     ) -> bool:
         """
-        删除消息历史
+        Delete message history.
         
         Args:
-            thread_id: 线程ID，如果为None则删除默认线程
-            before: 删除此时间之前的消息（如果为None则删除全部）
+            thread_id: Thread ID, if None, delete default thread
+            before: Delete messages before this time (if None, delete all)
             
         Returns:
-            是否删除成功
+            Whether deletion was successful
             
         Example:
-            >>> # 删除整个线程的历史
+            >>> # Delete history of the entire thread
             >>> manager.delete_messages("session_1")
             >>> 
-            >>> # 删除7天前的消息
+            >>> # Delete messages from 7 days ago
             >>> from datetime import datetime, timedelta
             >>> week_ago = datetime.now() - timedelta(days=7)
             >>> manager.delete_messages("session_1", before=week_ago)
@@ -569,22 +570,22 @@ class AdvancedMessageHistory:
         
         try:
             if before:
-                # 获取现有消息
+                # Get existing messages
                 messages = self.get_messages(tid)
                 
-                # 过滤保留的消息
+                # Filter messages to keep
                 kept_messages = [
                     m for m in messages
                     if not hasattr(m, 'timestamp') or m.timestamp >= before
                 ]
                 
-                # 保存过滤后的消息
+                # Save filtered messages
                 return self.save_messages(kept_messages, tid)
             else:
-                # 删除整个线程
+                # Delete entire thread
                 config = {"configurable": {"thread_id": tid}}
                 
-                # 保存空消息列表
+                # Save empty message list
                 return self.save_messages([], tid)
                 
         except Exception as e:
@@ -594,10 +595,10 @@ class AdvancedMessageHistory:
 
     def get_all_threads(self) -> List[str]:
         """
-        获取所有线程ID
+        Get all thread IDs.
         
         Returns:
-            线程ID列表
+            List of thread IDs
             
         Example:
             >>> threads = manager.get_all_threads()
@@ -605,21 +606,21 @@ class AdvancedMessageHistory:
             ...     print(f"Thread: {thread}")
         """
         try:
-            # 这个方法依赖于 checkpointer 的实现
-            # MemorySaver 可能需要遍历内部存储
-            # PostgresSaver 可以查询数据库
+            # This method depends on the checkpointer implementation.
+            # MemorySaver might need to iterate through internal storage.
+            # PostgresSaver can query the database.
             
-            # 对于 MemorySaver
+            # For MemorySaver
             if hasattr(self.checkpointer, 'storage'):
                 storage = self.checkpointer.storage
                 threads = set()
                 for key in storage.keys():
-                    # key 格式通常是 (thread_id, checkpoint_ns, checkpoint_id)
+                    # Key format is usually (thread_id, checkpoint_ns, checkpoint_id)
                     if isinstance(key, tuple) and len(key) >= 1:
                         threads.add(key[0])
                 return list(threads)
             
-            # 对于其他类型的 checkpointer，可能需要不同的实现
+            # Different implementations might require different methods
             return []
             
         except Exception as e:
@@ -629,13 +630,13 @@ class AdvancedMessageHistory:
 
     def get_latest_checkpoint_id(self, thread_id: Optional[str] = None) -> Optional[str]:
         """
-        获取最新的 checkpoint ID
+        Get the latest checkpoint ID.
         
         Args:
-            thread_id: 线程ID
+            thread_id: Thread ID
             
         Returns:
-            最新的 checkpoint ID，如果不存在则返回 None
+            Latest checkpoint ID, or None if none exist
             
         Example:
             >>> checkpoint_id = manager.get_latest_checkpoint_id("session_1")
@@ -660,15 +661,15 @@ class AdvancedMessageHistory:
         include_metadata: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        获取详细的消息历史（包含元数据）
+        Get detailed message history (including metadata).
         
         Args:
-            thread_id: 线程ID
-            limit: 限制返回数量
-            include_metadata: 是否包含元数据
+            thread_id: Thread ID
+            limit: Limit the number returned
+            include_metadata: Whether to include metadata
             
         Returns:
-            消息历史列表，每个元素包含消息和可选的元数据
+            Message history list, each element containing the message and optional metadata
             
         Example:
             >>> history = manager.get_message_history(
@@ -698,7 +699,7 @@ class AdvancedMessageHistory:
 
     def clear_cache(self):
         """
-        清除内部缓存
+        Clear internal cache.
         
         Example:
             >>> manager.clear_cache()
@@ -712,26 +713,26 @@ class AdvancedMessageHistory:
         format: Literal["json", "dict", "markdown"] = "dict"
     ) -> Any:
         """
-        导出消息历史
+        Export message history.
         
         Args:
-            thread_id: 线程ID
-            format: 导出格式
-                - json: JSON 字符串
-                - dict: Python 字典
-                - markdown: Markdown 格式文本
+            thread_id: Thread ID
+            format: Export format
+                - json: JSON string
+                - dict: Python dictionary
+                - markdown: Markdown format text
             
         Returns:
-            导出的数据
+            Exported data
             
         Example:
-            >>> # 导出为字典
+            >>> # Export as dictionary
             >>> data = manager.export_history("session_1", format="dict")
             >>> 
-            >>> # 导出为 JSON
+            >>> # Export as JSON
             >>> json_str = manager.export_history("session_1", format="json")
             >>> 
-            >>> # 导出为 Markdown
+            >>> # Export as Markdown
             >>> md = manager.export_history("session_1", format="markdown")
         """
         messages = self.get_messages(thread_id)
@@ -768,11 +769,11 @@ class AdvancedMessageHistory:
         
 
         
-    #     # ==================== 场景：清理和优化历史 ====================
-    # # 1. 获取消息
+    #     # ==================== Scenario: Clean and optimize history ====================
+    # # 1. Get messages
     # messages = history_manager.get_messages("session_1")
 
-    # # 2. 清理消息（去重、移除空消息）
+    # # 2. Clean messages (deduplicate, remove empty)
     # cleaned = history_manager.clean_messages(
     #     messages,
     #     remove_duplicates=True,
@@ -780,20 +781,20 @@ class AdvancedMessageHistory:
     #     compress_consecutive=True
     # )
 
-    # # 3. 过滤只保留对话消息
+    # # 3. Filter to keep only dialogue messages
     # dialogue_only = history_manager.filter_messages(
     #     cleaned,
     #     message_types=[HumanMessage, AIMessage]
     # )
 
-    # # 4. 智能修剪
+    # # 4. Smart trimming
     # trimmed = history_manager.trim_messages_smart(
     #     dialogue_only,
     #     max_tokens=2000,
     #     strategy="last"
     # )
 
-    # # 5. 保存优化后的历史
+    # # 5. Save optimized history
     # history_manager.save_messages(trimmed, "session_1")
 
-    # print(f"优化完成: {len(messages)} → {len(trimmed)} 条消息")
+    # print(f"Optimization complete: {len(messages)} -> {len(trimmed)} messages")

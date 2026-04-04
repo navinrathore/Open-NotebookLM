@@ -9,10 +9,10 @@ from langgraph.graph import StateGraph
 
 class GenericGraphBuilder:
     """
-    增强版通用建图器，支持：
-    1. @pre_tool 和 @post_tool 装饰器
-    2. 链式调用添加节点、边、条件边
-    3. 自动工具注册和管理
+    Enhanced Generic Graph Builder, supports:
+    1. @pre_tool and @post_tool decorators
+    2. Chained calls to add nodes, edges, and conditional edges
+    3. Automatic tool registration and management
     """
 
     def __init__(self, state_model: type[BaseModel], entry_point: str = "start"):
@@ -22,22 +22,22 @@ class GenericGraphBuilder:
         self.edges: List[Tuple[str, str]] = []
         self.conditional_edges: Dict[str, Callable] = {}
         
-        # 工具注册表
+        # Tool Register
         self.pre_tool_registry: Dict[str, Dict[str, Callable]] = {}  # role -> {name: func}
         self.post_tool_registry: Dict[str, List[Callable]] = {}     # role -> [func]
         
-        # 延迟导入 tool_manager 避免循环导入
+        # Lazy import tool_manager to avoid circular imports
         self.tool_manager = None
 
     def _get_tool_manager(self):
-        """延迟导入 tool_manager"""
+        """Lazy import tool_manager"""
         if self.tool_manager is None:
             from workflow_engine.toolkits.tool_manager import get_tool_manager
             self.tool_manager = get_tool_manager()
         return self.tool_manager
 
     def pre_tool(self, name: str, role: str):
-        """装饰器：注册前置工具到指定角色"""
+        """Decorator: Register pre-tool to a specific role"""
         def decorator(func: Callable):
             if role not in self.pre_tool_registry:
                 self.pre_tool_registry[role] = {}
@@ -46,7 +46,7 @@ class GenericGraphBuilder:
         return decorator
 
     def post_tool(self, role: str):
-        """装饰器：注册后置工具到指定角色"""
+        """Decorator: Register post-tool to a specific role"""
         def decorator(func: Callable):
             if role not in self.post_tool_registry:
                 self.post_tool_registry[role] = []
@@ -55,12 +55,12 @@ class GenericGraphBuilder:
         return decorator
 
     def add_node(self, name: str, func: Callable, role: str = None) -> 'GenericGraphBuilder':
-        """添加单个节点，支持链式调用"""
+        """Add a single node, supports chaining"""
         self.nodes[name] = (func, role or name)
         return self
 
     def add_nodes(self, nodes: Dict[str, Callable], role_mapping: Dict[str, str] = None) -> 'GenericGraphBuilder':
-        """批量添加节点，支持角色映射"""
+        """Batch add nodes, supports role mapping"""
         role_mapping = role_mapping or {}
         for name, func in nodes.items():
             role = role_mapping.get(name, name)
@@ -68,30 +68,30 @@ class GenericGraphBuilder:
         return self
 
     def add_edge(self, src: str, dst: str) -> 'GenericGraphBuilder':
-        """添加单条边"""
+        """Add a single edge"""
         self.edges.append((src, dst))
         return self
 
     def add_edges(self, edges: List[Tuple[str, str]]) -> 'GenericGraphBuilder':
-        """批量添加边"""
+        """Batch add edges"""
         self.edges.extend(edges)
         return self
 
     def add_conditional_edge(self, src: str, condition_func: Callable) -> 'GenericGraphBuilder':
-        """添加单个条件边"""
+        """Add a single conditional edge"""
         self.conditional_edges[src] = condition_func
         return self
 
     def add_conditional_edges(self, conditional_edges: Dict[str, Callable]) -> 'GenericGraphBuilder':
-        """批量添加条件边"""
+        """Batch add conditional edges"""
         self.conditional_edges.update(conditional_edges)
         return self
 
     def _register_tools_for_role(self, role: str, state: Any):
-        """为指定角色注册工具"""
+        """Register tools for a specific role"""
         tm = self._get_tool_manager()
         
-        # 注册前置工具
+        # Register pre-tools
         if role in self.pre_tool_registry:
             for tool_name, tool_func in self.pre_tool_registry[role].items():
                 try:
@@ -102,25 +102,25 @@ class GenericGraphBuilder:
                         override=True
                     )
                 except TypeError:
-                    # 兼容不支持 override 参数的版本
+                    # Compatible with versions that don't support the override parameter
                     tm.register_pre_tool(
                         name=tool_name,
                         role=role,
                         func=lambda s=state, f=tool_func: f(s)
                     )
 
-        # 注册后置工具
+        # Register post-tools
         if role in self.post_tool_registry:
             for tool_func in self.post_tool_registry[role]:
                 tm.register_post_tool(tool_func, role=role)
 
     def _wrap_node_with_tools(self, node_func: Callable, role: str):
-        """为节点包装自动工具注册逻辑"""
+        """Wrap node with automatic tool registration logic"""
         async def wrapped_node(state):
-            # 执行前自动注册该角色的工具
+            # Automatically register tools for the role before execution
             self._register_tools_for_role(role, state)
             
-            # 执行原始节点函数
+            # Execute original node function
             if asyncio.iscoroutinefunction(node_func):
                 return await node_func(state)
             else:
@@ -129,19 +129,19 @@ class GenericGraphBuilder:
         return wrapped_node
 
     def build(self):
-        """构建并返回编译后的图"""
+        """Build and return the compiled graph"""
         sg = StateGraph(self.state_model)
         
-        # 添加节点（自动包装工具注册逻辑）
+        # Add nodes (autowrap tool registration logic)
         for name, (func, role) in self.nodes.items():
             wrapped_func = self._wrap_node_with_tools(func, role)
             sg.add_node(name, wrapped_func)
         
-        # 添加普通边
+        # Add normal edges
         for src, dst in self.edges:
             sg.add_edge(src, dst)
         
-        # 添加条件边
+        # Add conditional edges
         for src, cond_func in self.conditional_edges.items():
             sg.add_conditional_edges(src, cond_func)
         

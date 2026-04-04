@@ -161,8 +161,8 @@ class PlanStep:
     index: int                              # Step index
     description: str                        # Step description
     status: str = "pending"                 # pending | running | completed | failed | skipped
-    result: Optional[str] = None            # 执行结果
-    error: Optional[str] = None             # 错误信息
+    result: Optional[str] = None            # Execution result
+    error: Optional[str] = None             # Error message
     started_at: Optional[str] = None        # Start time
     completed_at: Optional[str] = None      # Completion time
 
@@ -464,7 +464,7 @@ class KBPodcastState(MainState):
     audio_path: str = ""
 
 
-# ==================== KBMindMap 相关 State ====================
+# ==================== KBMindMap Related State ====================
 
 @dataclass
 class KBMindMapRequest(MainRequest):

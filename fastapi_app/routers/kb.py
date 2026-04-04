@@ -847,14 +847,14 @@ async def chat_with_kb_stream(
             yield _jsonl_line({
                 "type": "stage",
                 "stage": "preparing",
-                "message": "正在准备来源",
+                "message": "Preparing sources",
                 "message_en": "Preparing sources",
             })
 
             yield _jsonl_line({
                 "type": "stage",
                 "stage": "analyzing",
-                "message": "正在分析来源内容",
+                "message": "Analyzing sources",
                 "message_en": "Analyzing sources",
             })
             await prepare_parallel_file_analyses(state)
@@ -862,7 +862,7 @@ async def chat_with_kb_stream(
             yield _jsonl_line({
                 "type": "stage",
                 "stage": "retrieving",
-                "message": "正在检索相关片段",
+                "message": "Retrieving relevant chunks",
                 "message_en": "Retrieving relevant chunks",
             })
             prompt = build_intelligent_qa_prompt(state)
@@ -933,7 +933,7 @@ async def chat_with_kb_stream(
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
-# ---------- 1.1 对话记录：入库与读取 ----------
+# ---------- 1.1 Conversation Records: Sync & Retrieval ----------
 def _supabase_upsert_conversation(email: str, user_id: Optional[str], notebook_id: Optional[str]) -> Optional[Dict[str, Any]]:
     sb = get_supabase_admin_client()
     if not sb:
@@ -958,7 +958,7 @@ def _supabase_upsert_conversation(email: str, user_id: Optional[str], notebook_i
             "user_email": email,
             "user_id": user_id,
             "notebook_id": notebook_id,
-            "title": "对话",
+            "title": "Conversation",
         }).execute()
         data = (ins.data or []) if hasattr(ins, "data") else []
         return data[0] if data else None
@@ -1040,7 +1040,7 @@ async def append_conversation_messages(
         return {"success": False, "message": str(e)}
 
 
-# ---------- 1.2 生成记录持久化：列表与写入 ----------
+# ---------- 1.2 Persistent Generation Records: Listing and Storage ----------
 @router.get("/outputs")
 async def list_outputs(
     email: Optional[str] = None,
@@ -1112,7 +1112,7 @@ async def list_outputs(
 
 
 def _extract_text_from_files(file_paths: List[str], max_chars: int = 50000) -> str:
-    """从知识库文件列表中提取并合并文本，供 DrawIO 等使用。"""
+    """Extract and merge text from knowledge base files for DrawIO and other tools."""
     parts = []
     total = 0
     for f in file_paths:
@@ -1188,7 +1188,7 @@ def _save_output_record(
         log.warning("_save_output_record failed: %s", e)
 
 
-# ---------- 1.3 笔记本（目录）与后端联动 ----------
+# ---------- 1.3 Notebooks (Registry) and Backend Integration ----------
 def _notebooks_local_path(user_id: str) -> Path:
     root = get_project_root()
     safe_id = _sanitize_user_id(user_id)
@@ -1231,7 +1231,7 @@ def _create_notebook_local(user_id: str, name: str, description: str = "") -> Di
     return new_nb
 
 
-# 不做用户管理时使用的默认用户，数据从 outputs/local 取
+# Default user used when no user management is active; data fetched from outputs/local.
 DEFAULT_USER_ID = "local"
 DEFAULT_EMAIL = "local"
 
@@ -1413,13 +1413,13 @@ async def fast_research(
     google_cse_id: Optional[str] = Body(None, embed=True),
 ) -> Dict[str, Any]:
     """
-    Fast Research: 用户输入查询，搜索引擎搜索，返回 top_k 条结果作为候选来源。
-    支持：
-    - serper：Google（环境变量 SERPER_API_KEY）
-    - serpapi：Google / 百度，传 search_api_key + search_engine（google | baidu）
-    - google_cse：传 search_api_key + google_cse_id
-    - brave：传 search_api_key
-    - bocha：博查 AI 网页搜索（https://api.bocha.cn），传 search_api_key（Bearer 鉴权）
+    Fast Research: User enters a query, search engine searches, and returns the top_k results as candidate sources.
+    Supports:
+    - serper: Google (SERPER_API_KEY env)
+    - serpapi: Google / Baidu, pass search_api_key + search_engine (google | baidu)
+    - google_cse: pass search_api_key + google_cse_id
+    - brave: pass search_api_key
+    - bocha: Bocha AI Web Search (https://api.bocha.cn), pass search_api_key (Bearer Auth)
     """
     top_k = max(1, min(20, top_k))
     sources = fast_research_search(
@@ -1438,7 +1438,7 @@ async def fast_research(
 
 
 def _pdf_to_markdown(local_path: str) -> str:
-    """将本地 PDF 提取为可读文本/简单 markdown，用于前端展示。"""
+    """Extract local PDF as readable text/simple markdown for frontend display."""
     text_parts: List[str] = []
     try:
         doc = fitz.open(local_path)
@@ -1458,8 +1458,8 @@ def _pdf_to_markdown(local_path: str) -> str:
 
 def _manifest_path_for_storage_path(storage_path: str) -> Optional[Path]:
     """
-    根据来源文件路径（如 /outputs/kb_data/default/notebook_id/xxx.pdf）推断该笔记本的
-    vector_store 目录并返回 knowledge_manifest.json 路径；若无法推断则返回 None。
+    Infer the vector_store directory based on the source file path (e.g., /outputs/kb_data/default/notebook_id/xxx.pdf)
+    and return knowledge_manifest.json path; returns None if cannot be inferred.
     """
     raw = _from_outputs_url((storage_path or "").strip())
     p = Path(raw)
@@ -1486,8 +1486,8 @@ async def get_source_display_content(
     email: Optional[str] = Body(None, embed=True),
 ) -> Dict[str, Any]:
     """
-    返回用于前端展示的来源内容。若该来源已建索引且存在 MinerU 产出的 MD，则返回该 MD 内容；
-    否则返回 from_mineru=false，前端可回退到 parse-local-file / fetch-page-content。
+    Return source content for frontend display. If the source is indexed and MinerU markdown exists, return it;
+    otherwise return from_mineru=false, and frontend can fallback to parse-local-file / fetch-page-content.
     """
     if not path or not path.strip():
         return {"content": None, "from_mineru": False}
@@ -1617,8 +1617,8 @@ async def import_link_sources(
     items: List[Dict[str, Any]] = Body(..., embed=True),
 ) -> Dict[str, Any]:
     """
-    将 Fast Research 等返回的候选来源导入到当前笔记本。
-    每个 URL 通过 httpx 抓取正文存为 .md，然后自动触发 embedding。
+    Import candidate sources returned by Fast Research, etc., into the current notebook.
+    Each URL is fetched via httpx, saved as .md, and then auto-triggers embedding.
     New layout: outputs/{title}_{id}/sources/{stem}/
     """
     if not notebook_id or not email:
@@ -1646,7 +1646,7 @@ async def import_link_sources(
         filename = ""
         try:
             text = await asyncio.to_thread(fetch_page_text, link)
-            if not text or text.startswith("[抓取失败"):
+            if not text or text.startswith("[Fetch failed"):
                 raise RuntimeError(text or "empty response")
 
             # Import into new layout
@@ -1666,9 +1666,9 @@ async def import_link_sources(
                 except Exception:
                     pass
 
-            log.info("[import-link-sources] 已抓取并保存: %s -> %s", link[:60], filename)
+            log.info("[import-link-sources] Fetched and saved: %s -> %s", link[:60], filename)
         except Exception as e:
-            log.warning("[import-link-sources] 抓取失败 %s: %s", link[:60], e)
+            log.warning("[import-link-sources] Fetch failed %s: %s", link[:60], e)
 
         existing.append({
             "id": f"link-{int(time.time() * 1000)}-{imported}",
@@ -1695,9 +1695,9 @@ async def import_link_sources(
                 model_name=local_model
             )
             embedded = len(saved_md_paths)
-            log.info("[import-link-sources] embedding 完成, %d 个文件", embedded)
+            log.info("[import-link-sources] Embedding complete, %d files", embedded)
         except Exception as e:
-            log.warning("[import-link-sources] embedding 失败: %s", e)
+            log.warning("[import-link-sources] Embedding failed: %s", e)
 
     return {"success": True, "imported": imported, "embedded": embedded}
 
@@ -1758,21 +1758,21 @@ async def generate_ppt_from_kb(
     Generate PPT from knowledge base file. Outputs under user/notebook dir.
     """
     try:
-        # 兼容前端传 file_paths 为数组或单个字符串；保证多选时每项一个来源
+        # Compatible with frontend passing file_paths as an array or a single string; ensure each item is a source when multiple are selected
         if file_paths is not None:
             raw_list = file_paths if isinstance(file_paths, list) else [file_paths] if file_paths else []
         else:
             raw_list = [file_path] if file_path else []
         input_paths = [x for x in raw_list if x]
-        log.info("[generate-ppt] 收到 file_paths 数量: %s", len(input_paths))
+        log.info("[generate-ppt] Received file_paths count: %s", len(input_paths))
 
         if not input_paths:
             raise HTTPException(status_code=400, detail="No input files provided")
         if not isinstance(page_count, int) or page_count < 1 or page_count > 50:
             raise HTTPException(status_code=400, detail="page_count must be an integer between 1 and 50")
-        log.info("[generate-ppt] 收到 page_count=%s", page_count)
+        log.info("[generate-ppt] Received page_count=%s", page_count)
 
-        # 区分本地文件与网页 URL（前端会传 type=link 的 url 为 http(s) 链接）
+        # Distinguish between local files and web URLs (frontend passes http(s) links with type=link)
         url_sources: List[str] = []
         path_sources: List[Path] = []
         user_image_items: List[Dict[str, Any]] = []
@@ -1822,7 +1822,7 @@ async def generate_ppt_from_kb(
         pdf_paths_for_outline: List[Path] = []
 
         if use_text_input:
-            # 按 input_paths 顺序：先本地文件再 URL，生成「来源1」「来源2」…（含网页抓取）
+            # In input_paths order: local files then URLs, generating "Source 1", "Source 2"... (including web scraping)
             text_parts: List[str] = []
             idx = 0
             for p in input_paths:
@@ -1834,18 +1834,18 @@ async def generate_ppt_from_kb(
                     if local_md is not None:
                         try:
                             content = local_md.read_text(encoding="utf-8", errors="replace")
-                            log.info("[generate-ppt] 网页来源使用已存 .md: %s", local_md.name)
+                            log.info("[generate-ppt] Web source using existing .md: %s", local_md.name)
                         except Exception as e:
-                            log.warning("[generate-ppt] 读取已存 .md 失败 %s: %s", local_md, e)
+                            log.warning("[generate-ppt] Failed to read existing .md %s: %s", local_md, e)
                     if not (content or "").strip():
                         try:
                             content = fetch_page_text(ps, max_chars=100000)
                             if content:
-                                log.info("[generate-ppt] 网页来源 %s 抓取成功，长度=%s", idx, len(content))
+                                log.info("[generate-ppt] Web source %s fetch successful, length=%s", idx, len(content))
                         except Exception as e:
-                            log.warning("[generate-ppt] 网页来源抓取失败 %s: %s", ps[:80], e)
+                            log.warning("[generate-ppt] Web source fetch failed %s: %s", ps[:80], e)
                     if (content or "").strip():
-                        text_parts.append(f"来源{len(text_parts) + 1}:\n{content.strip()}")
+                        text_parts.append(f"Source {len(text_parts) + 1}:\n{content.strip()}")
                     continue
                 local_path = _resolve_local_path(p)
                 if not local_path.exists():
@@ -1858,7 +1858,7 @@ async def generate_ppt_from_kb(
                     if ext in md_exts:
                         content = local_path.read_text(encoding="utf-8")
                     elif ext == ".pdf":
-                        # 优先从 MinerU 缓存读取高质量 markdown
+                        # Prioritize high-quality markdown from MinerU cache
                         content = _read_mineru_md_if_cached(local_path, email, notebook_id, notebook_title=notebook_title)
                         if not content:
                             content = _extract_text_from_files([str(local_path)])
@@ -1867,15 +1867,15 @@ async def generate_ppt_from_kb(
                     else:
                         content = ""
                     if (content or "").strip():
-                        text_parts.append(f"来源{len(text_parts) + 1}:\n{content.strip()}")
+                        text_parts.append(f"Source {len(text_parts) + 1}:\n{content.strip()}")
                 except Exception as e:
-                    log.warning("read doc %s (来源%s): %s", local_path.name, len(text_parts) + 1, e)
+                    log.warning("read doc %s (Source %s): %s", local_path.name, len(text_parts) + 1, e)
             combined_text = "\n\n".join(text_parts).strip()
-            log.info("[generate-ppt] 共 %s 个来源（本地 %s + 网页 %s），TEXT 块数: %s", len(path_sources) + len(url_sources), len(path_sources), len(url_sources), len(text_parts))
+            log.info("[generate-ppt] Total %s sources (Local %s + Web %s), TEXT chunks: %s", len(path_sources) + len(url_sources), len(path_sources), len(url_sources), len(text_parts))
             if not combined_text:
                 raise HTTPException(status_code=400, detail="No text content could be read from the selected sources")
         else:
-            # 仅 PDF/PPTX/DOCX：转 PDF 后合并
+            # Only PDF/PPTX/DOCX: Convert to PDF then merge
             local_pdf_paths: List[Path] = []
             convert_dir = output_dir / "input"
             convert_dir.mkdir(parents=True, exist_ok=True)
@@ -1919,7 +1919,7 @@ async def generate_ppt_from_kb(
 
         resolved_image_items.extend(user_image_items)
 
-        # Embedding + retrieval (optional): use notebook-scoped vector store，入库只用本地 embedding，MinerU 输出到 kb_mineru
+        # Embedding + retrieval (optional): use notebook-scoped vector store, local embedding, MinerU outputs to kb_mineru
         retrieval_text = ""
         if need_embedding:
             base_dir = _notebook_dir(email, notebook_id) / "vector_store"
@@ -1965,7 +1965,7 @@ async def generate_ppt_from_kb(
                 results = manager.search(query=query, top_k=search_top_k, file_ids=file_ids)
                 retrieval_text = "\n\n".join([r.get("content", "") for r in results if r.get("content")])
 
-        # Prepare request（支持 PDF 或 TEXT：.md 及混合时用 TEXT）
+        # Prepare request (supports PDF or TEXT: .md and mixed use TEXT)
         ppt_req = Paper2PPTRequest(
             input_type="TEXT" if use_text_input else "PDF",
             input_content=combined_text if use_text_input else str(local_file_path),
@@ -1981,29 +1981,29 @@ async def generate_ppt_from_kb(
             aspect_ratio="16:9",
             use_long_paper=False
         )
-        log.info("[generate-ppt] ppt_req.page_count=%s（将传入 outline 生成）", ppt_req.page_count)
+        log.info("[generate-ppt] ppt_req.page_count=%s (passed for outline generation)", ppt_req.page_count)
 
-        # 复用 embedding 入库时已有的 MinerU 解析结果，避免重复跑 MinerU
+        # Reuse existing MinerU cache to avoid re-parsing
         if not use_text_input and pdf_paths_for_outline:
             n_reused = _reuse_mineru_cache(pdf_paths_for_outline, output_dir, email, notebook_id, notebook_title=notebook_title)
-            log.info("[generate-ppt] MinerU 缓存复用: %s/%s 个 PDF", n_reused, len(pdf_paths_for_outline))
+            log.info("[generate-ppt] MinerU cache reuse: %s/%s PDFs", n_reused, len(pdf_paths_for_outline))
 
-        # Step 1: 生成大纲（kb_page_content 内含 LLM outline_agent，无人工确认）
-        log.info("[generate-ppt] Step 1: 运行 kb_page_content，由 LLM 生成大纲 (outline)")
+        # Step 1: Generate outline (kb_page_content uses LLM outline_agent, no manual confirmation)
+        log.info("[generate-ppt] Step 1: Running kb_page_content, LLM generating outline")
         state_pc = _init_state_from_request(ppt_req, result_path=output_dir)
         state_pc.kb_query = query or ""
         state_pc.kb_retrieval_text = retrieval_text
         state_pc.kb_user_images = resolved_image_items
-        # 多 PDF 时按「来源1:\n...\n\n来源2:\n...」拼入，供 outline 使用
+        # For multiple PDFs, join as "Source 1:\n...\n\nSource 2:\n..." for outline use
         if not use_text_input and len(pdf_paths_for_outline) > 1:
             multi_parts = []
             for i, p in enumerate(pdf_paths_for_outline):
-                # 优先从 MinerU 缓存读取高质量 markdown
+                # Prioritize high-quality markdown from MinerU cache
                 part = _read_mineru_md_if_cached(p, email, notebook_id, notebook_title=notebook_title)
                 if not part:
                     part = _extract_text_from_files([str(p)])
                 if part.strip():
-                    multi_parts.append(f"来源{i + 1}:\n{part}")
+                    multi_parts.append(f"Source {i + 1}:\n{part}")
             if multi_parts:
                 state_pc.kb_multi_source_text = "\n\n".join(multi_parts)
         state_pc_result = await run_workflow("kb_page_content", state_pc)
@@ -2013,11 +2013,11 @@ async def generate_ppt_from_kb(
         else:
             state_pc = state_pc_result
         pagecontent = getattr(state_pc, "pagecontent", []) or []
-        log.info("[generate-ppt] Step 1 完成: 大纲已生成，共 %s 页", len(pagecontent))
+        log.info("[generate-ppt] Step 1 Complete: Outline generated, %s pages total", len(pagecontent))
         if not pagecontent:
-            raise HTTPException(status_code=500, detail="大纲生成结果为空，请检查输入文档或重试")
+            raise HTTPException(status_code=500, detail="Outline generation resulted in empty output. Please check input documents or retry.")
 
-        # Step 2: 按大纲生图并导出 PDF/PPTX（与 Paper2Any 一致使用 paper2ppt_parallel_consistent_style）
+        # Step 2: Generate images and export PDF/PPTX according to outline (uses paper2ppt_parallel_consistent_style)
         state_pc.pagecontent = pagecontent
         log.info("[generate-ppt] Step 2: 运行 paper2ppt_parallel_consistent_style 生图")
         state_pp = await run_workflow("paper2ppt_parallel_consistent_style", state_pc)
@@ -2134,13 +2134,13 @@ async def generate_deep_research_report(
         # ============================================================================
 
         if use_full_deep_research:
-            # 使用完整的阿里DeepResearch（多轮ReAct推理）
-            log.info("[generate-deep-research-report] 使用完整DeepResearch模式: topic=%r, max_iterations=%s", topic[:150], max_iterations)
+            # Use full Alibaba DeepResearch (multi-round ReAct reasoning)
+            log.info("[generate-deep-research-report] Using full DeepResearch mode: topic=%r, max_iterations=%s", topic[:150], max_iterations)
 
-            # 如果没有传递 serper_api_key，尝试使用 search_api_key 作为回退
+            # Fallback to search_api_key if serper_api_key is missing
             final_serper_key = serper_api_key or search_api_key
 
-            log.info("[generate-deep-research-report] API配置: serper_api_key=%s, search_api_key=%s, final_serper_key=%s",
+            log.info("[generate-deep-research-report] API Config: serper_api_key=%s, search_api_key=%s, final_serper_key=%s",
                      "***" if serper_api_key else "None",
                      "***" if search_api_key else "None",
                      "***" if final_serper_key else "None")
@@ -2334,16 +2334,17 @@ async def generate_podcast_from_kb(
     language: str = Body("en", embed=True),
 ):
     """
-    从知识库生成播客。支持本地文件与「搜索引入」的 URL：URL 优先用已存 .md，否则抓取后写临时 .md 再参与生成。
+    Generate podcast from knowledge base. Supports local files and "search-imported" URLs:
+    URLs prioritize existing .md; otherwise, they are fetched and written as temporary .md files before generation.
     """
     try:
         # Validate TTS mode restrictions
         if podcast_mode == "dialog":
             tts_lower = tts_model.lower()
             if "qwen" in tts_lower:
-                raise HTTPException(status_code=400, detail="qwen-tts 仅支持单人播客模式")
+                raise HTTPException(status_code=400, detail="qwen-tts only supports monologue podcast mode")
             if "gemini" in tts_lower and "tts" in tts_lower and "apiyi" not in api_url.lower():
-                raise HTTPException(status_code=400, detail="gemini-2.5-flash-tts 双人模式需要使用 apiyi 平台")
+                raise HTTPException(status_code=400, detail="gemini-2.5-flash-tts dialogue mode requires the apiyi platform")
 
         ts = int(time.time())
         # New layout: outputs/{title}_{id}/podcast/{ts}/
@@ -2367,9 +2368,9 @@ async def generate_podcast_from_kb(
                 if local_md is not None:
                     try:
                         content = local_md.read_text(encoding="utf-8", errors="replace")
-                        log.info("[generate-podcast] 网页来源使用已存 .md: %s", local_md.name)
+                        log.info("[generate-podcast] Web source using existing .md: %s", local_md.name)
                     except Exception as e:
-                        log.warning("[generate-podcast] 读取已存 .md 失败: %s", e)
+                        log.warning("[generate-podcast] Failed to read existing .md: %s", e)
                 if not (content or "").strip():
                     try:
                         content = fetch_page_text(ps, max_chars=100000)
@@ -2388,7 +2389,7 @@ async def generate_podcast_from_kb(
                     raise HTTPException(status_code=404, detail=f"File not found: {ps}")
                 local_paths.append(local_path)
 
-        # 过滤不支持的文件类型（例如图片），只保留可转文本的文档（含 .md 报告）
+        # Filter unsupported file types (e.g., images), keeping only documents for text conversion.
         supported_exts = {".pdf", ".docx", ".doc", ".pptx", ".ppt", ".md", ".markdown"}
         filtered_paths: List[Path] = []
         ignored_paths: List[Path] = []
@@ -2546,7 +2547,8 @@ async def generate_mindmap_from_kb(
     language: str = Body("en", embed=True),
 ):
     """
-    从知识库生成思维导图。支持本地文件与「搜索引入」的 URL：路径用 _resolve_local_path；URL 优先用已存 .md，否则抓取后写临时 .md。
+    Generate mindmap from knowledge base. Supports local files and "search-imported" URLs:
+    URLs prioritize existing .md; otherwise, they are fetched and written as temporary .md files.
     """
     try:
         project_root = get_project_root()
@@ -3112,7 +3114,7 @@ async def run_deep_research(
     max_iterations: int = Body(50, embed=True),
 ):
     """
-    运行 DeepResearch 深度研究并将结果保存为 source
+    Run DeepResearch deep study and save result as a source.
 
     Args:
         query: 研究问题

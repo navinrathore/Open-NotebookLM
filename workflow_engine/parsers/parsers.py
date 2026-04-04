@@ -8,21 +8,21 @@ from workflow_engine.logger import get_logger
 log = get_logger(__name__)
 
 class BaseParser(ABC):
-    """解析器基类"""
+    """Base Parser Class"""
     
     @abstractmethod
     def parse(self, content: str) -> Dict[str, Any]:
-        """解析LLM输出内容"""
+        """Parse LLM output content"""
         pass
     
     @abstractmethod
     def get_format_instruction(self) -> str:
-        """返回格式说明，用于添加到提示词中"""
+        """Return format instructions, for adding to prompts"""
         pass
 
 
 class JSONParser(BaseParser):
-    """JSON解析器 - 支持 Schema 定义"""
+    """JSON Parser - Supports Schema Definition"""
     
     def __init__(self, 
                  schema: Optional[Dict[str, Any]] = None,
@@ -31,10 +31,10 @@ class JSONParser(BaseParser):
                  example: Optional[Dict[str, Any]] = None):
         """
         Args:
-            schema: JSON Schema 定义，如 {"code": "string", "files": "list"}
-            schema_description: 对 schema 的文字描述
-            required_fields: 必填字段列表
-            example: 示例 JSON
+            schema: JSON Schema definition, e.g., {"code": "string", "files": "list"}
+            schema_description: Text description of the schema
+            required_fields: List of required fields
+            example: Example JSON
         """
         self.schema = schema
         self.schema_description = schema_description
@@ -45,43 +45,43 @@ class JSONParser(BaseParser):
         from workflow_engine.utils import robust_parse_json
         try:
             parsed = robust_parse_json(content)
-            log.info("JSON 解析成功")
+            log.info("JSON parsing successful")
             return parsed
         except ValueError as e:
-            log.warning(f"JSON解析失败: {e}")
+            log.warning(f"JSON parsing failed: {e}")
             return {"raw": content}
         except Exception as e:
-            log.warning(f"解析过程出错: {e}")
+            log.warning(f"Error during parsing process: {e}")
             return {"raw": content}
     
     def get_format_instruction(self) -> str:
-        """生成详细的格式说明"""
-        instruction = "请以JSON格式返回结果，不要包含其他文字说明!!!直接返回json内容，不要```json进行包裹！！"
+        """Generate detailed format instructions"""
+        instruction = "Please return the results in JSON format. Do NOT include any other text explanations!!! Return the JSON content directly, do not wrap it with ```json!!"
         
         if self.schema_description:
             instruction += f"\n{self.schema_description}"
         
         if self.schema:
-            instruction += f"\n\n期望的JSON结构：\n```json\n{json.dumps(self.schema, indent=2, ensure_ascii=False)}\n```"
+            instruction += f"\n\nExpected JSON structure:\n```json\n{json.dumps(self.schema, indent=2, ensure_ascii=False)}\n```"
         
         if self.example:
-            instruction += f"\n\n示例：\n```json\n{json.dumps(self.example, indent=2, ensure_ascii=False)}\n```"
+            instruction += f"\n\nExample:\n```json\n{json.dumps(self.example, indent=2, ensure_ascii=False)}\n```"
         
         if self.required_fields:
-            instruction += f"\n\n必填字段：{', '.join(self.required_fields)}"
+            instruction += f"\n\nRequired fields: {', '.join(self.required_fields)}"
         
         return instruction
 
 
 class XMLParser(BaseParser):
-    """XML解析器 - 解析标签内容"""
+    """XML Parser - Parse tag content"""
     
     def __init__(self, root_tag: str = "result"):
         self.root_tag = root_tag
     
     def parse(self, content: str) -> Dict[str, Any]:
         try:
-            # 清理可能的markdown代码块
+            # Clean possible markdown code blocks
             content = content.strip()
             if content.startswith("```xml"):
                 content = content[6:]
@@ -91,69 +91,69 @@ class XMLParser(BaseParser):
                 content = content[:-3]
             content = content.strip()
             
-            # 解析XML
+            # Parse XML
             root = ET.fromstring(content)
             result = self._parse_element(root)
-            log.info("XML 解析成功")
+            log.info("XML parsing successful")
             return result
             
         except ET.ParseError as e:
-            log.warning(f"XML解析失败: {e}")
+            log.warning(f"XML parsing failed: {e}")
             return {"raw": content}
         except Exception as e:
-            log.warning(f"XML解析过程出错: {e}")
+            log.warning(f"Error during XML parsing: {e}")
             return {"raw": content}
     
     def _parse_element(self, element: ET.Element) -> Dict[str, Any]:
-        """递归解析XML元素"""
+        """Recursively parse XML elements"""
         result = {}
         
-        # 处理属性
+        # Handle attributes
         if element.attrib:
             result.update(element.attrib)
         
-        # 处理子元素
+        # Handle child elements
         children = list(element)
         if children:
             for child in children:
                 child_data = self._parse_element(child)
                 if child.tag in result:
-                    # 如果已存在，转为列表
+                    # If it already exists, convert to a list
                     if not isinstance(result[child.tag], list):
                         result[child.tag] = [result[child.tag]]
                     result[child.tag].append(child_data)
                 else:
                     result[child.tag] = child_data
         else:
-            # 叶子节点，获取文本
+            # Leaf node, get text
             text = element.text.strip() if element.text else ""
             if text:
                 result["value"] = text
         
-        # 如果result只有value，直接返回value
+        # If result only contains 'value', return 'value' directly
         if len(result) == 1 and "value" in result:
             return result["value"]
         
         return result if result else element.text
     
     def get_format_instruction(self) -> str:
-        return f"请以XML格式返回结果，根标签为<{self.root_tag}>，不要包含其他文字说明。"
+        return f"Please return the results in XML format, with the root tag being <{self.root_tag}>. Do not include other text explanations."
 
 
 class TextParser(BaseParser):
-    """文本解析器 - 不做任何解析"""
+    """Text Parser - No parsing performed"""
     
     def parse(self, content: str) -> Dict[str, Any]:
-        log.info("使用文本解析器，不做处理")
+        log.info("Using text parser, no processing performed")
         return {"text": content}
     
     def get_format_instruction(self) -> str:
-        return "请以自然语言文本形式返回结果。"
+        return "Please return the results in natural language text."
 
 
-# 解析器工厂
+# Parser Factory
 class ParserFactory:
-    """解析器工厂"""
+    """Parser Factory"""
     
     _parsers = {
         "json": JSONParser,
@@ -163,15 +163,15 @@ class ParserFactory:
     
     @classmethod
     def create(cls, parser_type: str, **kwargs) -> BaseParser:
-        """创建解析器实例"""
+        """Create parser instance"""
         parser_type = parser_type.lower()
         if parser_type not in cls._parsers:
-            raise ValueError(f"不支持的解析器类型: {parser_type}，可用类型: {list(cls._parsers.keys())}")
+            raise ValueError(f"Unsupported parser type: {parser_type}, available types: {list(cls._parsers.keys())}")
         
         parser_class = cls._parsers[parser_type]
         return parser_class(**kwargs)
     
     @classmethod
     def register(cls, name: str, parser_class: type):
-        """注册新的解析器类型"""
+        """Register new parser type"""
         cls._parsers[name.lower()] = parser_class

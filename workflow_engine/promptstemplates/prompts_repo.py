@@ -101,13 +101,13 @@ Return a JSON object with the following structure:
 Each description should be a clear, concise statement of what one operator should do.
 
 [EXAMPLE]
-Input: "过滤掉长度小于10的文本，然后去重，最后提取关键词"
+Input: "Filter out text with length less than 10, then deduplicate, and finally extract keywords"
 Output:
 {{
   "operator_descriptions": [
-    "过滤掉长度小于10个字符的文本数据",
-    "对文本数据进行去重处理，移除重复内容",
-    "从文本中提取关键词"
+    "Filter out text data with length less than 10 characters",
+    "Perform deduplication on the text data to remove duplicate content",
+    "Extract keywords from the text"
   ]
 }}
 """
@@ -145,14 +145,14 @@ The list of available operators for each data type:
 1. Follow Execution Order:
   Data generation must occur before data extraction
   Data extraction must occur before data validation
-  Correct order: Filter → Generate → Extract → Validate
-  Incorrect order: Filter → Extract → Generate
+  Correct order: Filter â†’ Generate â†’ Extract â†’ Validate
+  Incorrect order: Filter â†’ Extract â†’ Generate
 2 .Validate Data Availability:
   Check sample data to confirm which fields already exist
   If an operator requires field "X" but it's not present in the sample data, ensure a preceding operator creates it
 3. Important!!!
-If the provided built‑in operators cannot meet the requirements – for example:
-“Automatically identify the document type (national standard vs. local standard); extract the fire‑protection topic from the document content” –
+If the provided builtâ€‘in operators cannot meet the requirements â€“ for example:
+â€œAutomatically identify the document type (national standard vs. local standard); extract the fireâ€‘protection topic from the document contentâ€� â€“
 then these must be handled separately by using two custom operators, such as:
   "name": "PromptedGenerator",
   "description": "Generate data based on a user-provided prompt. Combines a system prompt and the input content to produce output text that meets the requirements. Input parameters:\n- llm_serving: LLM service object that implements the LLMServingABC interface\n- system_prompt: system prompt that defines model behavior, default 'You are a helpful agent.'\n- input_key: name of the input content field, default 'raw_content'\n- output_key: name of the output content field, default 'generated_content'\nOutput:\n- A DataFrame containing the generated content\n- The name of the output field, for downstream operators to reference",
@@ -268,7 +268,7 @@ class Planer:
     {{"system_prompt_data_analyst": "You are a data processing expert. Analyze the RAW dataset and return a full analysis report."}},
     {{"task_prompt_content_analysis": "Analyze the raw dataset: {{raw_dataset}} Generate a report including: 1. Data types 2. Quality metrics 3. Anomaly flags. Example output: {{\\\"data_types\\\": {{\\\"text\\\": 85%, \\\"numeric\\\": 15%}}, \\\"quality_score\\\": 0.92, \\\"anomalies\\\": []}}"}},
     {{"system_prompt_pipeline_architect": "You extract pipeline configuration parameters from pre-existing data objects."}},
-    {{"task_prompt_pipeline_design": "From the complete analysis result: {{content_analysis_result}} and governance rules: {{governance_rules}}, extract ONLY the following: 1. Required operator types 2. Processing sequence 3. Compliance checkpoints. Example output: {{\\\"operators\\\": [\\\"text_cleaner\\\"], \\\"sequence\\\": [\\\"clean→validate\\\"], \\\"checks\\\": [\\\"GDPR\\\"]}}"}}
+    {{"task_prompt_pipeline_design": "From the complete analysis result: {{content_analysis_result}} and governance rules: {{governance_rules}}, extract ONLY the following: 1. Required operator types 2. Processing sequence 3. Compliance checkpoints. Example output: {{\\\"operators\\\": [\\\"text_cleaner\\\"], \\\"sequence\\\": [\\\"cleanâ†’validate\\\"], \\\"checks\\\": [\\\"GDPR\\\"]}}"}}
   ]
 }}
 """
@@ -534,7 +534,7 @@ Return ONLY a JSON object with field:
 
 [RULES]
 - Keep step_id aligned with intent for subsequent use of the matched operator context through step-by-step RAG.
-- 位置说明必须明确（between/before/after/start/end/target 选其一或组合），以确保可执行。
+- Position instructions must be clear (choose one or a combination of between/before/after/start/end/target) to ensure executability.
 - Only JSON.
 """
 
@@ -549,11 +549,11 @@ You are a JSON pipeline refiner with access to operator search tools. Modify the
 4. **CHECK MATCH QUALITY**: The search tool returns a `match_quality` field indicating how well the results match your query:
    - "high" (similarity >= 0.5): Good match, safe to use
    - "medium" (similarity 0.3-0.5): Moderate match, verify the operator description matches your needs
-   - "low" (similarity < 0.3): Poor match, the operators may NOT satisfy the requirement. You should report "未能找到满足XXX需求的算子" in this case.
+   - "low" (similarity < 0.3): Poor match, the operators may NOT satisfy the requirement. You should report "Could not find an operator satisfying the XXX requirement" in this case.
 
 **JSON Modification Rules:**
 - For remove: delete the node and its edges; then connect all predecessors to all successors to keep connectivity (DAG, no cycles).
-- For insert_between(a,b): replace edge a→b with a→new and new→b.
+- For insert_between(a,b): replace edge aâ†’b with aâ†’new and newâ†’b.
 - For insert_before/after/start/end: adjust edges accordingly and keep graph connected.
 - For add without explicit position: append at end and wire all terminal nodes to the new node using provided ports.
 - Edge fields: {"source","target","source_port","target_port"}.
@@ -803,7 +803,7 @@ JSON output example:
 """
 
 # --------------------------------------------------------------------------- #
-# 12. 执行并调试算子                                                           #
+# 12. Execute and Debug Operator                                              #
 # --------------------------------------------------------------------------- #
 class ExecuteAndDebugOperator:
     system_prompt_for_exe_and_debug_operator = """
@@ -822,7 +822,7 @@ and describe the entire process.
 """
 
 # --------------------------------------------------------------------------- #
-# 13. 调试pipeline                                                         #
+# 13. Debug Pipeline                                                         #
 # --------------------------------------------------------------------------- #
 class DebugPipeline:
     system_prompt_for_code_debugging = """
@@ -833,15 +833,15 @@ Always think step-by-step before you answer.
 """ 
     task_prompt_for_code_debugging = """
 [INPUT]
-① Pipeline code (read-only):
+â‘  Pipeline code (read-only):
 {pipeline_code}
-② Error trace / shell output:
+â‘¡ Error trace / shell output:
 {error_trace}
 
 [OUTPUT RULES]
 Reply only with a valid JSON object, no markdown, no comments.
 1 The JSON must and can only contain one top-level key:
-”reason“: In natural language, explain in detail the root cause of the error and provide specific, actionable suggestions for a fix. Your answer must include error analysis, a detailed reasoning process, and concrete solutions, clearly indicating which code needs to be modified or added.
+â€�reasonâ€œ: In natural language, explain in detail the root cause of the error and provide specific, actionable suggestions for a fix. Your answer must include error analysis, a detailed reasoning process, and concrete solutions, clearly indicating which code needs to be modified or added.
 
 2 All JSON keys and string values must be double-quoted, with no trailing commas.
 3 If you are unsure about any value, use an empty string.
@@ -876,11 +876,11 @@ The input consists of:
  -The FileStorage class uses the step() method to manage and switch between different stages of data processing. Each time you call step(), it advances to the next operation step, ensuring that data for each stage is read from or written to a separate cache file, enabling stepwise storage and management in multi-stage data flows.
 
 [OUTPUT RULES]
-1.Reply only with a valid JSON object, no markdown, no comments.
-2.For the pipeline, the output_key of the previous operator and the input_key of the next operator must be filled in correctly and must match the data flow. Modify them logically as needed；
-3.The JSON must and can only contain one top-level key:
-{"code": Return the modified and corrected version of the code based on the analysis, as a string.}
-4.请根据Debug analysis and suggestions修改代码；
+1. Reply only with a valid JSON object, no markdown, no comments.
+2. For the pipeline, the output_key of the previous operator and the input_key of the next operator must be filled in correctly and must match the data flow. Modify them logically as needed.
+3. The JSON must and can only contain one top-level key:
+    {"code": "Return the modified and corrected version of the code based on the analysis, as a string."}
+4. Modify the code based on Debug analysis and suggestions.
 All JSON keys and string values must be double-quoted, with no trailing commas.
 If you are unsure about any value, use an empty string.
 Double-check that your response is a valid JSON. Do not output anything else.
@@ -898,7 +898,7 @@ class InfoRequesterPrompt:
 
     task_prompt_for_context_collection = """
 [TASK]
-Analyze the pipeline code and error trace to decide **which modules’ source
+Analyze the pipeline code and error trace to decide **which modulesâ€™ source
 code you must inspect**.
 
 [INPUT]
@@ -908,18 +908,18 @@ code you must inspect**.
 2. Error trace:
 {error_trace}
 
-[WORKFLOW – STRICT]
+[WORKFLOW â€“ STRICT]
 Step 1  Analyse the error and list the modules you need.
 Step 2  Call the function tool **fetch_other_info**
-        with       module_list=[ "...", ... ]        ← REQUIRED
+        with       module_list=[ "...", ... ]        â†� REQUIRED
 Step 3  Wait for the tool result (the code), then write your summary.
 
 [EXAMPLES]
-• Storage problem → {{"module_list": ["dataflow.utils.storage"]}}
-• Multiple files   → {{"module_list": ["pkg.a", "pkg.b"]}}
+â€¢ Storage problem â†’ {{"module_list": ["dataflow.utils.storage"]}}
+â€¢ Multiple files   â†’ {{"module_list": ["pkg.a", "pkg.b"]}}
 
 
-请问，如果要解决上述错误还需要哪些额外信息？？
+What additional information is needed to resolve the above error??
 [OUTPUT PROTOCOL]
 Phase A (before you have the code):
     Respond ONLY with the tool call, e.g.
@@ -997,7 +997,7 @@ Example of the required output format:
 
 
 # --------------------------------------------------------------------------- #
-# 17. LLM 注入 Serving                                                         #
+# 17. LLM Inject Serving                                                      #
 # --------------------------------------------------------------------------- #
 class AppendLLMServing:
     system_prompt_for_llm_append_serving = """
@@ -1011,8 +1011,8 @@ If the code already contains a valid llm_serving initialisation, keep it unchang
 [INPUTS]
 - pipeline_code: The complete operator source code.
 - llm_serving_snippet: The required initialisation snippet to use inside __init__.
-- example_data: A small sample of the dataset (list of JSON rows) — context only: {example_data}.
-- available_keys: List of available columns — context only: {available_keys}.
+- example_data: A small sample of the dataset (list of JSON rows) â€” context only: {example_data}.
+- available_keys: List of available columns â€” context only: {available_keys}.
 - target: The operator's intended purpose: {target}.
  
 
@@ -1031,7 +1031,7 @@ Do not add any __main__ entry.
 """
 
 # --------------------------------------------------------------------------- #
-# 18. LLM 生成实例化入口                                                        #
+# 18. LLM Generate Instantiation Entry                                         #
 # --------------------------------------------------------------------------- #
 class InstantiateOperator:
     system_prompt_for_llm_instantiate = """
@@ -1039,7 +1039,7 @@ class InstantiateOperator:
     You are a data operator code integration assistant.
 
     [TASK]
-    Generate a runnable entry code for the given operator code to process a jsonl data with FileStorage and llm_serving, 需要实现**target**的需求.
+    Generate a runnable entry code for the given operator code to process a jsonl data with FileStorage and llm_serving, fulfilling the **target** requirement.
 """
 
     task_prompt_for_llm_instantiate = """
@@ -1086,21 +1086,21 @@ No comments, no extra keys, no extra prints except:
 """
 
 # --------------------------------------------------------------------------- #
-# 19. 语法检查（Operator 生成后的代码审查）                                      #
+# 19. Grammar Check (Code Review after Operator Generation)                   #
 # --------------------------------------------------------------------------- #
 class GrammarCheck:
     system_prompt_for_grammar_check = """
 [ROLE]
-你是资深的 Python 代码语法与结构审查专家。你的职责是：
-1) 严格检查给定代码的语法正确性与基本结构合理性（类定义、导入、缩进等）；
-2) 在不影响原始设计的前提下，进行最小必要的修复（如缺失导入、明显的拼写/缩进错误）。
+You are a senior Python code grammar and structure review expert. Your responsibilities are:
+1) Strictly check the grammatical correctness and basic structural rationality of the given code (class definitions, imports, indentation, etc.);
+2) Perform minimal necessary repairs without affecting the original design (such as missing imports, obvious spelling/indentation errors).
 
 [OUTPUT RULES]
-仅返回一个JSON对象，包含如下键：
-  - grammar_ok: true/false 语法是否通过
-  - message: 字符串，若失败则给出最简明的错误说明（行号/原因）；若成功可为空字符串
-  - fixed_code: （可选）若做了轻量修复，返回修复后的完整代码字符串；若无修复则省略
-严禁返回除上述字段外的任何键；严禁解释性文字；严禁Markdown；严禁代码块标记。
+Return ONLY a JSON object containing the following keys:
+  - grammar_ok: true/false whether the grammar passes
+  - message: string, if failed give the most concise error description (line number/reason); if successful can be an empty string
+  - fixed_code: (optional) if a lightweight fix was made, return the complete fixed code string; if no fix, omit
+Strictly forbidden to return any keys other than the above; strictly forbidden explanatory text; strictly forbidden Markdown; strictly forbidden code block tagging.
 """
 
     task_prompt_for_grammar_check = """
@@ -1118,15 +1118,15 @@ class GrammarCheck:
 {target}
 
 [TASK]
-请对 pipeline_code 进行语法与结构审查，并在必要时进行最小修复。
-注意：
-1) 不要更改业务逻辑（如类名/方法签名），仅做语法层面的最小修复；
-2) 如果你新增了导入或修复了缩进，需在 fixed_code 中返回完整修复后代码。
+Please perform a grammar and structure review on the pipeline_code and make minimal repairs where necessary.
+Note:
+1) Do not change the business logic (such as class names/method signatures), only perform minimal repairs at the grammar level;
+2) If you added imports or fixed indentation, you must return the complete fixed code in fixed_code.
 
 [OUTPUT]
-只返回如下JSON：
+Return ONLY the following JSON:
 {"grammar_ok": true, "message": "", "fixed_code": ""}
-若 grammar_ok 为 false，则 message 必须简洁说明问题（例如："IndentationError at line 42"）。
+If grammar_ok is false, the message must concisely explain the problem (for example: "IndentationError at line 42").
 """
 
 # --------------------------------------------------------------------------- #
@@ -1140,10 +1140,10 @@ You are an expert in user intent recognition.
 Please return one or several comma-separated noun keywords related to the input, without any explanations. Each key word should represent a simplified single word domain name. If the input does not contain any relevant noun keywords related to the dataset, return 'No valid keyword'.
 
 [Example]
-Input1:我想要数学和物理相关的数据
+Input1: I want data related to mathematics and physics
 Output1: math, physics
 
-Input2:收集金融和医疗相关的数据
+Input2: Collect data related to finance and medicine
 Output2: finance, medicine
 
 User request: 
@@ -1176,7 +1176,7 @@ Sample Data: {first_row}
 
 1. **Check Dataset Relevance**: Determine whether the dataset content is related to the user's domain or intent described in ({user_target}). As long as the dataset belongs to the same domain/topic (for example, finance-related data for a finance request), treat it as relevant even if its task type (classification, sentiment analysis, etc.) differs from the user's exact wording. Only return null when the dataset is clearly unrelated to the requested domain.
 
-2. **Identify Text Column**: For relevant datasets, choose the column that contains textual content suitable for pretraining. Classification or sentiment datasets are acceptable—pick the column with coherent text (sentences, descriptions, comments, etc.) even if it is short or paired with labels.
+2. **Identify Text Column**: For relevant datasets, choose the column that contains textual content suitable for pretraining. Classification or sentiment datasets are acceptableâ€”pick the column with coherent text (sentences, descriptions, comments, etc.) even if it is short or paired with labels.
 
 3. **Do Not Over-Filter**: Do not reject a dataset merely because it lacks question-answer pairs or instructional dialogue. Whenever there is domain-aligned textual content, return the column name.
 
@@ -1257,249 +1257,246 @@ Example format:
 """
 
 # --------------------------------------------------------------------------- #
-# 22. WebAgent 相关 Prompts                                                       #
+# 22. WebAgent Related Prompts                                                #
 # --------------------------------------------------------------------------- #
 class WebAgentPrompts:
-    """WebAgent 系统的所有 Prompt 模板"""
+    """All Prompt templates for the WebAgent system"""
     
-    # 下载方法决策器
+    # Download Method Decision Maker
     system_prompt_for_download_method_decision = """
-你是一个智能下载策略决策器。当前系统策略为：始终优先尝试 "huggingface"，若失败则回退到 "web_crawl"。
-你的任务：
-1) 基于用户目标与搜索关键词，产出尽可能有效的 HuggingFace 搜索关键词,关键词尽量避免单独出现"datasets"、"machine learning"等与当前数据集无关的字样, 如果当前任务有具体的数据集名称例如"mnist",关键词可以直接是"mnist',尽量避免额外的字样影响检索召回,例如"mnist
- datasets"。
-2) 输出固定策略：method = "huggingface"，fallback_method = "web_crawl"。
+You are an intelligent download strategy decision maker. The current system strategy is: always prioritize trying "huggingface", and if it fails, fall back to "web_crawl".
+Your task:
+1) Based on user objectives and search keywords, produce the most effective HuggingFace search keywords possible. Keywords should avoid words unrelated to the current dataset such as "datasets" or "machine learning" appearing alone. If the current task has a specific dataset name such as "mnist", the keyword can be directly "mnist", avoiding extra words that affect retrieval recall, such as "mnist datasets".
+2) Output fixed strategy: method = "huggingface", fallback_method = "web_crawl".
 
-返回JSON格式：
+Return JSON format:
 {
     "method": "huggingface",
-    "reasoning": "简述为何HF可能可行，或给出关键词构成逻辑",
-    "keywords_for_hf": ["用于HF搜索的关键词列表"],
+    "reasoning": "Briefly state why HF might be feasible, or give the keyword construction logic",
+    "keywords_for_hf": ["List of keywords for HF search"],
     "fallback_method": "web_crawl"
 }
 """
     
-    task_prompt_for_download_method_decision = """用户目标: {objective}
-搜索关键词: {keywords}
-请根据上述策略生成用于HF的关键词，并按要求返回JSON（method固定为huggingface，fallback_method固定为web_crawl）。"""
+    task_prompt_for_download_method_decision = """User objective: {objective}
+Search keywords: {keywords}
+Please generate keywords for HF according to the above strategy and return JSON as required (method fixed to huggingface, fallback_method fixed to web_crawl)."""
     
-    # HuggingFace 决策器
+    # HuggingFace Decision Maker
     system_prompt_for_huggingface_decision = """
-你是一个HuggingFace数据集专家。你的任务是分析一个JSON格式的搜索结果列表，并根据用户的目标，选择一个最合适下载的数据集ID。
+You are a HuggingFace dataset expert. Your task is to analyze a JSON format list of search results and, based on the user's objective, select the most suitable dataset ID for download.
 
-决策标准:
-1.  **相关性**: 数据集的标题(title)和描述(description)必须与用户目标(objective)高度相关。
-2.  **可下载性 **: 
-    - 优先选择下载量(downloads)高、有明确标签(tags)的特定数据集 (例如: "squad", "mnist", "cifar10", "ChnSentiCorp")。
-3.  **流行度**: 在相关性相似的情况下，选择 `downloads` 数量最高的数据集。
-    同时参考用户的需求清晰描述(message)，若与 objective 一致则正常判断；若二者冲突，以更具体的 message 为准。
+Decision Criteria:
+1.  **Relevance**: The dataset title and description must be highly relevant to the user's objective.
+2.  **Downloadability**: 
+    - Prioritize specific datasets with high download counts and clear tags (e.g., "squad", "mnist", "cifar10", "ChnSentiCorp").
+3.  **Popularity**: In cases of similar relevance, choose the dataset with the highest `downloads` count.
+    Also refer to the user's clear demand description (message); if it matches the objective, judge normally; if they conflict, the more specific message shall prevail.
 
-你的输出必须是一个JSON对象:
+Your output must be a JSON object:
 {
-    "selected_dataset_id": "best/dataset-id", // 字符串, 或 null
-    "reasoning": "你为什么选择这个ID，以及为什么它可能是可下载的。"
+    "selected_dataset_id": "best/dataset-id", // string, or null
+    "reasoning": "Why you chose this ID and why it might be downloadable."
 }
-
-}`
 """
     
     task_prompt_for_huggingface_decision = """
-用户目标: "{objective}"
-用户清晰描述(message): "{message}"
+User objective: "{objective}"
+User clear description (message): "{message}"
 
-搜索结果:
+Search results:
 ```json
 {search_results}
 ```
 
-请根据上述标准选择最佳的数据集ID。
+Please select the best dataset ID based on the above criteria.
 """
     
-    # Kaggle 决策器
+    # Kaggle Decision Maker
     system_prompt_for_kaggle_decision = """
-你是一个Kaggle数据集专家。你的任务是分析一个JSON格式的搜索结果列表，并根据用户的目标，选择一个最合适下载的数据集ID。
+You are a Kaggle dataset expert. Your task is to analyze a JSON format list of search results and, based on the user's objective, select the most suitable dataset ID for download.
 
-决策标准:
-1. **相关性**: 数据集的标题(title)和描述(description)必须与用户目标(objective)高度相关。
-2. **大小限制**: 如果提供了max_dataset_size参数，必须选择大小(size，单位：字节)不超过该限制的数据集。如果所有数据集都超过限制，返回null。
-3. **可下载性**: 
-    - 优先选择下载量(downloads)高、有明确标签(tags)的特定数据集。
-4. **流行度**: 在相关性相似的情况下，选择 `downloads` 数量最高的数据集。
-   同时参考用户的需求清晰描述(message)，若与 objective 一致则正常判断；若二者冲突，以更具体的 message 为准。
+Decision Criteria:
+1. **Relevance**: The dataset title and description must be highly relevant to the user's objective.
+2. **Size Limit**: If a max_dataset_size parameter is provided, you must select a dataset whose size (in bytes) does not exceed this limit. If all datasets exceed the limit, return null.
+3. **Downloadability**: 
+    - Prioritize specific datasets with high download counts and clear tags.
+4. **Popularity**: In cases of similar relevance, choose the dataset with the highest `downloads` count.
+   Also refer to the user's clear demand description (message); if it matches the objective, judge normally; if they conflict, the more specific message shall prevail.
 
-你的输出必须是一个JSON对象:
+Your output must be a JSON object:
 {
-    "selected_dataset_id": "owner/dataset-slug", // 字符串, 或 null
-    "reasoning": "你为什么选择这个ID，以及为什么它可能是可下载的。如果因为大小限制被过滤，请说明。"
+    "selected_dataset_id": "owner/dataset-slug", // string, or null
+    "reasoning": "Why you chose this ID and why it might be downloadable. If filtered due to size limit, please explain."
 }
 """
     
     task_prompt_for_kaggle_decision = """
-用户目标: "{objective}"
-用户清晰描述(message): "{message}"
-最大数据集大小限制: {max_dataset_size} 字节 (None表示不限制)
+User objective: "{objective}"
+User clear description (message): "{message}"
+Max dataset size limit: {max_dataset_size} bytes (None means no limit)
 
-搜索结果:
+Search results:
 ```json
 {search_results}
 ```
 
-请根据上述标准选择最佳的数据集ID。注意：如果提供了大小限制，必须确保选择的数据集大小不超过限制。
+Please select the best dataset ID based on the above criteria. Note: if a size limit is provided, you must ensure the selected dataset size does not exceed the limit.
 """
     
-    # 数据集详情读取器
+    # Dataset Detail Reader
     system_prompt_for_dataset_detail_reader = """
-你是一个数据集分析专家。你的任务是读取和分析数据集的详细信息，特别是HuggingFace数据集。
+You are a dataset analysis expert. Your task is to read and analyze dataset details, especially HuggingFace datasets.
 
-你的任务：
-1. 分析数据集的详细信息（包括大小、配置、字段等）
-2. 检查数据集是否符合大小限制要求
-3. 提取关键信息供后续使用
+Your task:
+1. Analyze dataset details (including size, configuration, fields, etc.)
+2. Check if the dataset meets the size limit requirement
+3. Extract key information for subsequent use
 
-输出格式:
+Output format:
 {
-    "dataset_id": "数据集ID",
-    "size_bytes": 数据集大小（字节），如果无法获取则为null,
-    "size_readable": "人类可读的大小（如'1.5GB'）",
-    "configs": ["配置列表"],
-    "features": ["字段列表"],
-    "sample_count": 样本数量（如果可获取）,
-    "meets_size_limit": true/false, // 是否满足大小限制
-    "summary": "数据集摘要信息"
+    "dataset_id": "Dataset ID",
+    "size_bytes": Dataset size in bytes, or null if unavailable,
+    "size_readable": "Human-readable size (e.g., '1.5GB')",
+    "configs": ["List of configurations"],
+    "features": ["List of fields"],
+    "sample_count": Number of samples (if available),
+    "meets_size_limit": true/false, // Whether size limit is met
+    "summary": "Dataset summary information"
 }
 """
     
     task_prompt_for_dataset_detail_reader = """
-数据集ID: "{dataset_id}"
-数据集类型: "{dataset_type}"  // "huggingface" 或 "kaggle"
-最大大小限制: {max_dataset_size} 字节 (None表示不限制)
+Dataset ID: "{dataset_id}"
+Dataset type: "{dataset_type}"  // "huggingface" or "kaggle"
+Max size limit: {max_dataset_size} bytes (None means no limit)
 
-数据集详细信息:
+Dataset details:
 ```json
 {dataset_info}
 ```
 
-请分析该数据集的详细信息，并检查是否符合大小限制。
+Please analyze the dataset details and check if it meets the size limit.
 """
     
-    # 子任务精炼与去重
+    # Subtask Refinement and Deduplication
     system_prompt_for_subtask_refiner = """
-你是一名任务规划与质量控制专家。给你用户的清晰需求描述与一组待执行的子任务列表，请你：
-1) 删除重复或语义等价的子任务；
-2) 删除与用户需求领域不一致或不合理的子任务,例如用户想收集代码数据,但是子任务却让下载mnist,这是完全不允许的。
-3) 严格返回 JSON，键为 filtered_sub_tasks（数组）。
-每个子任务对象至少包含字段：type（"research"|"download"）、objective、search_keywords。
+You are a task planning and quality control expert. Given the user's clear demand description and a list of subtasks to be executed, please:
+1) Delete duplicate or semantically equivalent subtasks;
+2) Delete subtasks that are inconsistent with the user's requirement domain or unreasonable. For example, if the user wants to collect code data, but a subtask asks to download MNIST, this is strictly prohibited.
+3) Strictly return JSON with the key filtered_sub_tasks (array).
+Each subtask object must contain at least fields: type ("research"|"download"), objective, search_keywords.
 
-【示例1：删除领域不一致的任务】
-用户需求：收集Python代码数据集用于代码生成训练
-输入子任务：
+[Example 1: Remove domain-inconsistent tasks]
+User requirement: Collect Python code datasets for code generation training
+Input subtasks:
 [
-  {"type": "download", "objective": "下载Python代码数据集", "search_keywords": "python code"},
-  {"type": "download", "objective": "下载MNIST图像数据集", "search_keywords": "mnist"},
-  {"type": "download", "objective": "下载Python项目代码", "search_keywords": "python project"}
+  {"type": "download", "objective": "Download Python code dataset", "search_keywords": "python code"},
+  {"type": "download", "objective": "Download MNIST image dataset", "search_keywords": "mnist"},
+  {"type": "download", "objective": "Download Python project code", "search_keywords": "python project"}
 ]
-输出：
+Output:
 {
   "filtered_sub_tasks": [
-    {"type": "download", "objective": "下载Python代码数据集", "search_keywords": "python code"},
-    {"type": "download", "objective": "下载Python项目代码", "search_keywords": "python project"}
+    {"type": "download", "objective": "Download Python code dataset", "search_keywords": "python code"},
+    {"type": "download", "objective": "Download Python project code", "search_keywords": "python project"}
   ]
 }
-说明：删除了MNIST任务（图像数据集，与代码需求不符）
+Note: Deleted the MNIST task (image dataset, inconsistent with code requirement)
 
-【示例2：删除重复/语义等价的任务】
-用户需求：收集中文对话数据集
-输入子任务：
+[Example 2: Remove duplicate/semantically equivalent tasks]
+User requirement: Collect Chinese dialogue datasets
+Input subtasks:
 [
-  {"type": "download", "objective": "下载中文对话数据集", "search_keywords": "chinese dialogue"},
-  {"type": "download", "objective": "获取中文对话数据", "search_keywords": "chinese conversation"},
-  {"type": "download", "objective": "下载中文问答数据集", "search_keywords": "chinese qa"}
+  {"type": "download", "objective": "Download Chinese dialogue dataset", "search_keywords": "chinese dialogue"},
+  {"type": "download", "objective": "Get Chinese dialogue data", "search_keywords": "chinese conversation"},
+  {"type": "download", "objective": "Download Chinese Q&A dataset", "search_keywords": "chinese qa"}
 ]
-输出：
+Output:
 {
   "filtered_sub_tasks": [
-    {"type": "download", "objective": "下载中文对话数据集", "search_keywords": "chinese dialogue"},
-    {"type": "download", "objective": "下载中文问答数据集", "search_keywords": "chinese qa"}
+    {"type": "download", "objective": "Download Chinese dialogue dataset", "search_keywords": "chinese dialogue"},
+    {"type": "download", "objective": "Download Chinese Q&A dataset", "search_keywords": "chinese qa"}
   ]
 }
-说明：合并了"对话"和"conversation"的重复任务，保留问答任务（语义不同）
+Note: Merged duplicate tasks for "dialogue" and "conversation", kept the Q&A task (different semantics)
 
-【示例3：保留合理的多样化任务】
-用户需求：收集机器学习相关的文本数据集
-输入子任务：
+[Example 3: Keep reasonable diversified tasks]
+User requirement: Collect text datasets related to machine learning
+Input subtasks:
 [
-  {"type": "download", "objective": "下载机器学习论文摘要数据集", "search_keywords": "machine learning abstracts"},
-  {"type": "download", "objective": "下载NLP数据集", "search_keywords": "nlp dataset"},
-  {"type": "download", "objective": "下载图像分类数据集", "search_keywords": "image classification"},
-  {"type": "download", "objective": "下载ML文本语料库", "search_keywords": "ml text corpus"}
+  {"type": "download", "objective": "Download ML paper abstract dataset", "search_keywords": "machine learning abstracts"},
+  {"type": "download", "objective": "Download NLP dataset", "search_keywords": "nlp dataset"},
+  {"type": "download", "objective": "Download image classification dataset", "search_keywords": "image classification"},
+  {"type": "download", "objective": "Download ML text corpus", "search_keywords": "ml text corpus"}
 ]
-输出：
+Output:
 {
   "filtered_sub_tasks": [
-    {"type": "download", "objective": "下载机器学习论文摘要数据集", "search_keywords": "machine learning abstracts"},
-    {"type": "download", "objective": "下载NLP数据集", "search_keywords": "nlp dataset"},
-    {"type": "download", "objective": "下载ML文本语料库", "search_keywords": "ml text corpus"}
+    {"type": "download", "objective": "Download ML paper abstract dataset", "search_keywords": "machine learning abstracts"},
+    {"type": "download", "objective": "Download NLP dataset", "search_keywords": "nlp dataset"},
+    {"type": "download", "objective": "Download ML text corpus", "search_keywords": "ml text corpus"}
   ]
 }
-说明：删除了图像分类任务（非文本领域），合并了语义重复的ML文本任务
+Note: Deleted the image classification task (non-text domain), merged semantically duplicate ML text tasks
 """
 
     task_prompt_for_subtask_refiner = """
-用户清晰需求（message）:
+User clear demand description (message):
 
 {message}
 
 
-当前子任务列表（JSON 数组）:
+Current subtask list (JSON array):
 ```json
 {sub_tasks}
 ```
 
-请根据上述规则和示例，返回一个 JSON 对象：
+Please return a JSON object according to the above rules and examples:
 {
   "filtered_sub_tasks": [ {"type": "download", "objective": "...", "search_keywords": "..."}, ... ]
 }
 """
 
-    # 任务分解器
+    # Task Decomposer
     system_prompt_for_task_decomposer = """
-你是一个专业的AI项目规划师。你的任务是将用户的复杂请求分解成一个清晰、分步执行的JSON计划。
+You are a professional AI project planner. Your task is to decompose the user's complex request into a clear, step-by-step JSON plan.
 
-**任务规划要求**：
-1. **必须生成2个任务**：
-   - 第1个任务：type = 'research'，用于调研和收集相关信息
-   - 第2个任务：type = 'download'，用于下载数据集（作为兜底方案）
-2. research 任务会尽可能多地访问网站，收集信息。
-3. research 任务完成后，如果发现了具体的数据集，系统会自动生成新的 download 任务，并替换掉第2个通用 download 任务。
-4. 如果 research 没有发现具体目标，第2个 download 任务会作为兜底执行。
+**Task Planning Requirements**:
+1. **Must generate 2 tasks**:
+   - 1st task: type = 'research', for investigating and collecting relevant information
+   - 2nd task: type = 'download', for downloading datasets (as a fallback plan)
+2. The research task will visit as many websites as possible to collect information.
+3. After the research task is completed, if specific datasets are discovered, the system will automatically generate new download tasks and replace the 2nd generic download task.
+4. If research finds no specific target, the 2nd download task will execute as a fallback.
 
-计划由一个`sub_tasks`列表组成。每个子任务必须包含:
-1. `type`: 任务类型，'research' 或 'download'。
-2. `objective`: 对该子任务目标的清晰、简洁的描述。
-3. `search_keywords`: 根据 objective 提炼出的、最适合直接输入给搜索引擎的简短关键词。
- 此外，必须输出一个顶层字段 `message`，它是对用户当前需求的清晰、简明描述（1-2句），供后续阶段使用以避免语义偏差。
+A plan consists of a `sub_tasks` list. Each subtask must contain:
+1. `type`: Task type, 'research' or 'download'.
+2. `objective`: A clear, concise description of the subtask goal.
+3. `search_keywords`: Short keywords extracted according to the objective, most suitable for direct input into a search engine.
+ In addition, a top-level field `message` must be output, which is a clear, concise description of the user's current demand (1-2 sentences), for use in subsequent stages to avoid semantic deviation.
 
-示例输出格式:
+Example output format:
 {
-    "message": "针对用户需求的清晰描述",
+    "message": "Clear description of user demand",
     "sub_tasks": [
         {
             "type": "research",
-            "objective": "调研和收集关于XX的相关数据集信息",
+            "objective": "Investigate and collect information on relevant datasets for XX",
             "search_keywords": "XX dataset machine learning"
         },
         {
             "type": "download",
-            "objective": "下载XX相关的数据集",
+            "objective": "Download datasets related to XX",
             "search_keywords": "XX dataset download"
         }
     ]
 }
 """
     
-    task_prompt_for_task_decomposer = """请为以下用户请求创建一个子任务计划，并包含一个顶层字段 message（1-2句清晰描述用户当前需求）: '{request}'"""
+    task_prompt_for_task_decomposer = """Please create a subtask plan for the following user request, including a top-level field message (1-2 sentences clearly describing user current demand): '{request}'"""
     
-    # 查询生成 Agent
+    # æŸ¥è¯¢ç”Ÿæˆ� Agent
     system_prompt_for_query_generator = """
 You are a query generation expert for RAG retrieval. Your task is to generate diverse English search queries based on the research objective.
 
@@ -1517,7 +1514,7 @@ Generate diverse English search queries for RAG retrieval. Return a JSON array o
 Example format:
 ["query 1 in English", "query 2 in English", "query 3 in English"]"""
     
-    # 总结与规划 Agent
+    # æ€»ç»“ä¸Žè§„åˆ’ Agent
     system_prompt_for_summary_agent = """
 You are an AI analyst and task planner. Your responsibility is to extract key entities (such as dataset names) from the provided web text snippets based on the user's research objective, and create a new, specific download subtask for each entity.
 
@@ -1541,21 +1538,21 @@ Please analyze the following text snippets and generate specific download subtas
 
 {context}"""
     
-    # URL 筛选器
-    system_prompt_for_url_filter = """你是一个网页筛选专家。根据用户请求和分析标准，从下面给出的搜索引擎结果文本中，提取出最有可能包含有用信息或可下载数据集的URL。
+    # URL ç­›é€‰å™¨
+    system_prompt_for_url_filter = """ä½ æ˜¯ä¸€ä¸ªç½‘é¡µç­›é€‰ä¸“å®¶ã€‚æ ¹æ�®ç”¨æˆ·è¯·æ±‚å’Œåˆ†æž�æ ‡å‡†ï¼Œä»Žä¸‹é�¢ç»™å‡ºçš„æ�œç´¢å¼•æ“Žç»“æžœæ–‡æœ¬ä¸­ï¼Œæ��å�–å‡ºæœ€æœ‰å�¯èƒ½åŒ…å�«æœ‰ç”¨ä¿¡æ�¯æˆ–å�¯ä¸‹è½½æ•°æ�®é›†çš„URLã€‚
 
-要求：{url_count_instruction}，优先选择权威网站、官方文档、数据集平台等。
+è¦�æ±‚ï¼š{url_count_instruction}ï¼Œä¼˜å…ˆé€‰æ‹©æ�ƒå¨�ç½‘ç«™ã€�å®˜æ–¹æ–‡æ¡£ã€�æ•°æ�®é›†å¹³å�°ç­‰ã€‚
 
-返回一个包含'selected_urls'列表的JSON对象。"""
+è¿”å›žä¸€ä¸ªåŒ…å�«'selected_urls'åˆ—è¡¨çš„JSONå¯¹è±¡ã€‚"""
     
-    task_prompt_for_url_filter = """用户请求: '{request}'
+    task_prompt_for_url_filter = """ç”¨æˆ·è¯·æ±‚: '{request}'
 
-请从以下搜索结果文本中提取URL:
+è¯·ä»Žä»¥ä¸‹æ�œç´¢ç»“æžœæ–‡æœ¬ä¸­æ��å�–URL:
 ---
 {search_results}
 ---"""
     
-    # 网页阅读器
+    # ç½‘é¡µé˜…è¯»å™¨
     system_prompt_for_webpage_reader = """
 You are a highly focused web analysis agent.here's two kinds of tasks, research or download. Your goal is to find ALL relevant direct download links on this page that satisfy the subtask objective in download task, and find more useful information url about current research goal in research task.
 Your action MUST be one of the following:
@@ -1587,26 +1584,26 @@ class NodesExporter:
 You are an expert in data processing pipeline node extraction.
 """       
   task_prompt_for_nodes_export = """"
-我有一个 JSON 格式的 pipeline，只包含 "nodes" 数组。每个节点（node）有 "id" 和 "config" 字段，"config" 里包含 "run" 参数（如 input_key、output_key）。
+I have a pipeline in JSON format that only contains a "nodes" array. Each node has "id" and "config" fields, where "config" includes "run" parameters (such as input_key, output_key).
 
-请帮我自动修改每个节点的 input_key 和 output_key，使得这些节点从上到下（按 nodes 数组顺序）能前后相连，也就是说，每个节点的 output_key 会被下一个节点的 input_key 用到，形成一条完整的数据流管道。第一个节点的 input_key 可以固定为 "input1"，最后一个节点的 output_key 可以固定为 "output_final"。
+Please help me automatically modify the input_key and output_key of each node so that these nodes can be connected front-to-back (in the order of the nodes array) from top to bottom. That is, the output_key of each node will be used by the input_key of the next node, forming a complete data flow pipeline. The input_key of the first node can be fixed to "input1", and the output_key of the last node can be fixed to "output_final".
 
-最终要求是让所有节点的 input_key/output_key 自动对应起来，形成一条 pipeline。
+The final requirement is to make the input_key/output_key of all nodes correspond automatically to form a pipeline.
 
-下面是原始 JSON（只有 nodes，没有 edges）：
+Below is the original JSON (only nodes, no edges):
 {nodes_info}
 
-[输出规则]
-1. 第一个 node1 节点的 `input_key` 需要参考 需要参考样例数据的key是什么： {sample}。
-2. 中间节点的 `output_key 或者 output_key_* ` 和下一个节点的 `input_key 或者 input_key_*` , 必须是相同的 value，这样才能连线；
-3. 最后一个节点的 `output_key_*` 固定为 "output_final"。
-4. 如果某些节点的 `run` 字段未包含 `input_key` 或 `output_key`，则跳过这些字段，不要自己增改；
-5. 输出的 JSON 需保持与输入完全一致，除了 `input_key_*` 和 `output_key_*` 的值，其余字段（包括字段顺序、嵌套结构等）不作任何修改。
-6. 输出的 JSON 结构必须包含一个 `nodes` 的 key，且保持原始结构，只修改 `input_key` 和 `output_key`。
+[Output Rules]
+1. The `input_key` of the first node1 needs to refer to the key of the sample data: {sample}.
+2. The `output_key` or `output_key_*` of an intermediate node and the `input_key` or `input_key_*` of the next node must have the same value so they can be connected;
+3. The `output_key_*` of the last node is fixed to "output_final".
+4. If the `run` field of some nodes does not contain `input_key` or `output_key`, skip these fields and do not add or change them yourself;
+5. The output JSON must remain completely consistent with the input, except for the values of `input_key_*` and `output_key_*`; no other fields (including field order, nested structure, etc.) should be modified.
+6. The output JSON structure must contain a `nodes` key and maintain the original structure, only modifying `input_key` and `output_key`.
 
-[必须遵守: 只返回json内容，不要有其余任何的说明文字！！！解释！！注释！！！只需要json！！！]
+[MUST OBSERVE: Return ONLY the JSON content, no other explanation!! explanation!! comments!!! JSON ONLY!!!]
 
-返回内容参考：
+è¿”å›žå†…å®¹å�‚è€ƒï¼š
 
 {
   "nodes": 
@@ -1624,8 +1621,8 @@ You are an expert in data processing pipeline node extraction.
         },
         "run": {
           "storage": "self.storage.step()",
-          "input_key": '参考样例数据的key',
-          "output_key": "eval"  * 算子1的输出value
+          "input_key": "Key from sample data",
+          "output_key": "eval"  // Output value of operator 1
         }
       }
     },
@@ -1640,8 +1637,8 @@ You are an expert in data processing pipeline node extraction.
         },
         "run": {
           "storage": "self.storage.step()",
-          "input_key": "eval",   * 算子1的输出value，这里作为算子2的输出
-          "output_question_key": "refined_question",
+          "input_key": "eval",   // Output value of operator 1 used as input for operator 2
+          "output_question_key": "refined_question"
         }
       }
     }]
@@ -1728,46 +1725,46 @@ The paper content is provided in Markdown format below. You need to parse this M
 
 ## Content Structure
 The PPT must contain the following chapters (arranged in order), and each chapter must have a clear title and content:
-·Open slide (title, author, instructions​​)
-·Motivation (research background and problem statement and how differentiation from existing work)
-·Related work (current status and challenges in the field)
-·Method (core technical framework) [The content of the method needs to be introduced in detail, and each part of the method should be introduced on a separate page]
-·Experimental method (experimental design and process)
-·Experimental setting (dataset, parameters, environment, etc.)
-·Experimental results (main experimental results and comparative analysis)
-·Ablation experiment (validation of the role of key modules)
-·Deficiencies (limitations of current methods)
-·Future research (improvement direction or potential application)
-·End slide (Thank you)
+Â·Open slide (title, author, instructionsâ€‹â€‹)
+Â·Motivation (research background and problem statement and how differentiation from existing work)
+Â·Related work (current status and challenges in the field)
+Â·Method (core technical framework) [The content of the method needs to be introduced in detail, and each part of the method should be introduced on a separate page]
+Â·Experimental method (experimental design and process)
+Â·Experimental setting (dataset, parameters, environment, etc.)
+Â·Experimental results (main experimental results and comparative analysis)
+Â·Ablation experiment (validation of the role of key modules)
+Â·Deficiencies (limitations of current methods)
+Â·Future research (improvement direction or potential application)
+Â·End slide (Thank you)
 
 ## Format Requirements
-·**Font Safety:** **STRICTLY FORBIDDEN** to use any non-standard TeX Live fonts (e.g., `Times New Roman`, `Arial`, or `Calibri`). The model **MUST** use `\usepackage{{lmodern}}` or rely on default LaTeX fonts to ensure cross-platform compatibility.
-·Use Beamer's theme suitable for academic presentations. If given a theme you should use it (could be refer to local path)
-·The content of each page should be concise, avoid long paragraphs, and use itemize or block environment to present points.
-·The title page contains the paper title, author, institution, and date.
-·Key terms or mathematical symbols are highlighted with \alert{}.
-·You must use as many figures as possible since it is more expressive.
+Â·**Font Safety:** **STRICTLY FORBIDDEN** to use any non-standard TeX Live fonts (e.g., `Times New Roman`, `Arial`, or `Calibri`). The model **MUST** use `\usepackage{{lmodern}}` or rely on default LaTeX fonts to ensure cross-platform compatibility.
+Â·Use Beamer's theme suitable for academic presentations. If given a theme you should use it (could be refer to local path)
+Â·The content of each page should be concise, avoid long paragraphs, and use itemize or block environment to present points.
+Â·The title page contains the paper title, author, institution, and date.
+Â·Key terms or mathematical symbols are highlighted with \alert{}.
+Â·You must use as many figures as possible since it is more expressive.
 
 ## Image and Table Processing (Markdown to LaTeX)
-·All image relative paths found in markdown must be resolved into absolute paths by by prepending the absolute working directory specified by {pdf_images_working_dir}. When using ref{}, relative paths within Markdown files are no longer utilized; instead, the latest absolute paths are employed.
-·Images should automatically adapt to width (for example, \includegraphics[width=0.8\textwidth]{...}), and add titles and labels (\caption and \label).
-·Experimental result tables should be extracted from the source text, formatted using tabular or booktabs environments, and marked with reference sources (for example, "as shown in table \ref{tab:results}").
+Â·All image relative paths found in markdown must be resolved into absolute paths by by prepending the absolute working directory specified by {pdf_images_working_dir}. When using ref{}, relative paths within Markdown files are no longer utilized; instead, the latest absolute paths are employed.
+Â·Images should automatically adapt to width (for example, \includegraphics[width=0.8\textwidth]{...}), and add titles and labels (\caption and \label).
+Â·Experimental result tables should be extracted from the source text, formatted using tabular or booktabs environments, and marked with reference sources (for example, "as shown in table \ref{tab:results}").
 
 ## Code Generation Requirements
-·The generated LaTeX code must be complete and can be compiled directly (including necessary structures such as \documentclass, \begin{document}).
-·Mark the source text location corresponding to each section in the code comments (for example, % corresponds to the source text Section 3.2).
-·If there are mathematical formulas in the source text, they must be retained and correctly converted to LaTeX syntax (such as $y=f(x)$).
+Â·The generated LaTeX code must be complete and can be compiled directly (including necessary structures such as \documentclass, \begin{document}).
+Â·Mark the source text location corresponding to each section in the code comments (for example, % corresponds to the source text Section 3.2).
+Â·If there are mathematical formulas in the source text, they must be retained and correctly converted to LaTeX syntax (such as $y=f(x)$).
 
 ## Other instruction
-·(Important!) Perfer more images than heavy text. **The number of slides should be around 10.** 
-·Table content should first extract real data from the source document.
-·All content should be in {output_language}.
-·If the {output_language} is Chinese, you must include the following necessary packages in the LaTeX preamble:
+Â·(Important!) Perfer more images than heavy text. **The number of slides should be around 10.** 
+Â·Table content should first extract real data from the source document.
+Â·All content should be in {output_language}.
+Â·If the {output_language} is Chinese, you must include the following necessary packages in the LaTeX preamble:
 \usepackage{fontspec} 
 \usepackage{ctex}
-·If you need to use % to represent a percentage sign, please note that in LaTeX syntax, % denotes a comment. Therefore, you must prefix the % with an escape character \ to indicate a literal percentage sign, for example: 5\%
-·If the source text is long, it is allowed to summarize the content, but the core methods, experimental data and conclusions must be retained.
-·Must begin as \documentclass{beamer} and end as \end{document}.
+Â·If you need to use % to represent a percentage sign, please note that in LaTeX syntax, % denotes a comment. Therefore, you must prefix the % with an escape character \ to indicate a literal percentage sign, for example: 5\%
+Â·If the source text is long, it is allowed to summarize the content, but the core methods, experimental data and conclusions must be retained.
+Â·Must begin as \documentclass{beamer} and end as \end{document}.
 **Don't use "\usepackage{resizebox}" in the code which is not right in grammer.**
 **Don't use font: TeX Gyre Termes, Times New Roman**
 **& in title is not allowed which will cause error "Misplaced alignment tab character &"**
@@ -1847,70 +1844,71 @@ Return a JSON object with a single key "subtitle_and_cursor"
 
 class PromptWriterPrompt:
   system_prompt_for_prompt_writer = """
-    ### 角色
-    - 你是DataFlow项目的一名优秀的Prompt工程师，擅长撰写专业且有效的提示词。
+    ### Role
+    - You are an excellent Prompt Engineer for the DataFlow project, specialized in writing professional and effective prompts.
     
-    ### 任务背景
-    - DataFlow的算子负责对数据进行某种处理，以制造适用于大模型训练的优质数据。算子的工作过程是通过提示词来控制大模型进行处理数据。并且，大多数算子都有输入参数，需要把参数插入到提示词中。
-    - DataFlow中的算子提示词一般使用类的方式来实现，每一份提示词是一个类，通过实例化类，并调用build_prompt（或build_system_prompt）方法，来构建提示词。
-    - 提示词一般存储为格式字符串，并通过调用类的build_prompt（或build_system_prompt）方法传入参数，来构建提示词。
-      提示词抽象基类的定义为：
+    ### Task Background
+    - DataFlow operators are responsible for processing data to create high-quality data suitable for large model training. The working process of an operator is controlled by prompts to process data. Most operators have input parameters that need to be inserted into the prompt.
+    - Prompts in DataFlow are generally implemented as classes. Each prompt is a class; prompts are constructed by instantiating the class and calling the build_prompt (or build_system_prompt) method.
+    - Prompts are generally stored as format strings and constructed by passing parameters into the class's build_prompt (or build_system_prompt) method.
+      The definition of the abstract base class for prompts is:
       class DIYPromptABC():
           def __init__(self):
               pass
           def build_prompt(self):
               raise NotImplementedError
-      在具体的提示词类中，你的提示词代码需要导入并继承DIYPromptABC类，并实现build_prompt（或build_system_prompt）方法，传入参数，返回提示词字符串。
-    - 根据算子的不同，提示词的build接口可能为build_prompt或build_system_prompt，你需要阅读算子的源代码中的run方法，来确定提示词的build方法使用的是哪一个。
+      In a specific prompt class, your prompt code needs to import and inherit from the DIYPromptABC class and implement the build_prompt (or build_system_prompt) method, taking parameters and returning a prompt string.
+    - Depending on the operator, the build interface of the prompt may be build_prompt or build_system_prompt. You need to read the run method in the operator's source code to determine which build method is used.
     
-    ### 具体任务
-    - 根据任务描述、并参考算子的源代码、已有提示词示例生成一个针对新任务的提示词。如果未给出提示词示例和算子代码，则根据任务描述、参数列表和输出格式，进行撰写。同时记得为参数插入留出位置、加入输出格式的要求。
+    ### Specific Task
+    - Generate a prompt for a new task based on the task description, referring to the operator's source code and existing prompt examples. If no prompt example or operator code is given, write based on the task description, parameter list, and output format. At the same time, remember to leave placeholders for parameter insertion and include output format requirements.
     
-    ### 技能
-    1. Prompt设计
-    - 了解LLM的技术原理和局限性，包括它的训练数据、构建方式等，以便更好地设计Prompt
-    - 具有丰富的自然语言处理经验，能够设计出符合语法、语义的高质量Prompt
+    ### Skills
+    1. Prompt Design
+    - Understand the technical principles and limitations of LLMs, including their training data and construction methods, to better design prompts.
+    - Have rich experience in natural language processing and be able to design high-quality prompts that comply with grammar and semantics.
     
-    ### 工作步骤
-    1. 分析需求: 识别用户的核心需求
-    2. 架构设计：按照提示词的结构，设计提示词的各个部分的核心内容
-    3. 细节补充：填充各个部分的内容，为参数插入留出位置（使用<arg></arg>标签包裹参数名）、加入输出格式的要求
-    4. 查漏补缺：思考有哪些点是模型需要额外注意的，比如大模型对任务的理解是否会有偏差等
-    4. 输出结果
+    ### Workflow
+    1. Analyze needs: Identify the user's core needs.
+    2. Architecture design: Design the core content of various parts of the prompt according to the prompt structure.
+    3. Detail supplementation: Fill in the content of each part, leave placeholders for parameter insertion (use <arg></arg> tags to wrap parameter names), and add output format requirements.
+    4. Review and Refine: Think about what points the model needs extra attention on, such as whether the large model's understanding of the task might be biased.
+    5. Output results
     
-    # 输出格式
-    - 按以下格式撰写系统提示词，用户提示词可以自由撰写：
-        # 角色：
-        角色描述
-        # 任务
-        任务描述（可以把参数放在这部分）
-        # 工作步骤
-        模型的工作流程
-        # 输出格式
-        模型的输出格式要求，根据用户要求来撰写
-    - 你需要直接输出完整的prompt类，将其放入代码块中输出。
+    # Output Format
+    - Write system prompts in the following format; user prompts can be written freely:
+        # Role:
+        Role description
+        # Task
+        Task description (parameters can be placed in this part)
+        # Workflow
+        The model's workflow
+        # Output Format
+        Output format requirements for the model, written according to user requirements
+    - You need to directly output the complete prompt class, placing it in a code block.
     
-    ### 注意
-    - 在插入参数时，不需要在提示词中多个位置插入同一个参数，以免提示词过长
-    - 在插入参数时，不用特意强调“参数”这个概念，因为在使用的时候，会将实际值插入参数位置
-    - 你的输出中只能包含一次代码块，就是你生成的prompt类
-    - 撰写提示词文本部分时，既需要参考已有的提示词示例，也需要根据你的输出格式要求，最好能够在你的格式要求之下，融合已有提示词示例的关键要素。
-    - 你生成的代码文件中需要包含__all__变量，用于指定该文件中导出的类，方便其他文件导入。
+    ### Note
+    - When inserting parameters, do not insert the same parameter in multiple places in the prompt to avoid excessive prompt length.
+    - When inserting parameters, do not specifically emphasize the concept of "parameter", as actual values will be inserted at the parameter positions when used.
+    - Your output can only contain one code block, which is the prompt class you generated.
+    - When writing the text part of the prompt, you need to refer to existing prompt examples and follow your output format requirements. It is best to integrate key elements from existing prompt examples under your format requirements.
+    - The code file you generate needs to include an __all__ variable to specify the classes exported from the file for easy import by other files.
     """
+
     
-  task_prompt_for_prompt_writer = """
-    针对下面的算子代码：
+    task_prompt_for_prompt_writer = """
+    Targeting the following operator code:
     {operator_code}
     
-    我需要一个用于{task_description}的提示词
+    I need a prompt for {task_description}
     
-    其中需要包含的参数及对应描述为：
+    The parameters and corresponding descriptions that need to be included are:
     {arguments}
     
-    你生成的提示词中应当要求的输出格式为：
+    The output format required in the prompt you generate should be:
     {output_format}
     
-    可以参考以下同一个算子的提示词示例：
+    You can refer to the following prompt example for the same operator:
     {prompt_example}
   """
 
@@ -1929,11 +1927,11 @@ Your responsibilities:
 
 2. Figure Description Requirements:
    - Provide a single figure_description block that includes:
-       • Overall Layout
-       • A sequence of Subfigures (4–6 subfigures) (derived from the structure of the input)
-       • Overall Design and Color Scheme
-       • Figure Title and Labels
-       • Summary
+       â€¢ Overall Layout
+       â€¢ A sequence of Subfigures (4â€“6 subfigures) (derived from the structure of the input)
+       â€¢ Overall Design and Color Scheme
+       â€¢ Figure Title and Labels
+       â€¢ Summary
 
    * Each subfigure must include:
       * A concise title
@@ -1946,26 +1944,26 @@ Your responsibilities:
 3.  **STYLE SPECIFICATION (All style-related requirements are centralized here)**  
     The entire figure MUST follow these visual style rules:
     - **Hand-drawn Style**:
-        • Sketched, slightly imperfect strokes  
-        • Softer lines & shading  
+        â€¢ Sketched, slightly imperfect strokes  
+        â€¢ Softer lines & shading  
     - **3D / Isometric Elements**:
-        • Visual blocks, shapes, or modules must include depth or isometric perspective  
+        â€¢ Visual blocks, shapes, or modules must include depth or isometric perspective  
     - **Pastel Macaron Color Scheme**:
-        • Each subfigure uses a different soft pastel shade (light blue, lavender, pink, beige, mint, etc.)  
-        • Gentle gradient background for subtle depth  
+        â€¢ Each subfigure uses a different soft pastel shade (light blue, lavender, pink, beige, mint, etc.)  
+        â€¢ Gentle gradient background for subtle depth  
     - **Dividers**:
-        • Thin black lines separating subfigures  
+        â€¢ Thin black lines separating subfigures  
     - **Font**:
-        • Comic Sans MS everywhere  
+        â€¢ Comic Sans MS everywhere  
     - **Aspect Ratio**:
-        • Prefer 4:3 overall structure  
+        â€¢ Prefer 4:3 overall structure  
 
-    *In other parts of the prompt, when referring to visual elements, use phrasing such as “consistent with the overall style” instead of repeating this specification.*
+    *In other parts of the prompt, when referring to visual elements, use phrasing such as â€œconsistent with the overall styleâ€� instead of repeating this specification.*
 
 4. Title and Label Requirements:
    - The figure includes a main title supplied by the user at runtime.
-     • Centered at the top.
-     • Slightly larger than subfigure titles.
+     â€¢ Centered at the top.
+     â€¢ Slightly larger than subfigure titles.
    - Subfigure titles must contrast with their backgrounds.
    - Title and labels should appear **beside** visual elements, not overlapping them, and remain consistent with the overall style.
 
@@ -1991,12 +1989,12 @@ Add this to the beginning of your description:
 **Special Notice**
 
 * **Text Placement**:
-  • Ensure the text is positioned **beside** the image elements, not on top of them.  
-  • Maintain clear separation so text blocks do not overlap visual areas.
+  â€¢ Ensure the text is positioned **beside** the image elements, not on top of them.  
+  â€¢ Maintain clear separation so text blocks do not overlap visual areas.
 
 * **Subfigure Separation**:
-  • Ensure each subfigure has **crisp, non-overlapping boundaries**.  
-  • No arrows or elements may cross from one subfigure into another.
+  â€¢ Ensure each subfigure has **crisp, non-overlapping boundaries**.  
+  â€¢ No arrows or elements may cross from one subfigure into another.
 
 You must output:
 {"fig_desc": "<description>"} where <description> is a string type.
@@ -2012,7 +2010,7 @@ USER CONTENT END
 --------------------
 
 --------------------
-提示词风格： {style}
+Prompt style: {style}
 --------------------
 """
 
@@ -2022,37 +2020,38 @@ USER CONTENT END
 class PaperIdeaExtractorPrompts:
     # System prompt template for paper content extraction (focused on the methods section)
     system_prompt_for_paper_idea_extractor = """
-    你现在的任务是：从提供的论文内容中，**精确抽取整篇论文的 “Methods”（方法）部分原文**。
+    Your current task is: extract the **exact "Methods" section text** of the entire paper from the provided paper content.
 
-    请严格遵守以下要求：
+    Please strictly follow these requirements:
 
-    1. **只做抽取，不做加工**  
-      - 不要进行任何形式的解释、总结、改写或补充。  
-      - 不要添加任何你自己的文字、标点或说明。  
-      - 只返回从论文中截取出来的原始内容。
+    1. **Extraction Only, No Processing**
+      - Do not interpret, summarize, rewrite, or supplement in any form.
+      - Do not add any of your own text, punctuation, or explanations.
+      - Return only the original content captured from the paper.
 
-    2. **必须完整抽取 “Methods” 部分**  
-      - 如果论文中有明确的章节标题，如 “Methods”, “Materials and Methods”, “Methodology” 等，请从该章节标题开始，到该章节正式结束为止，**原样抽取全部内容**。  
-      - 如果论文中没有明确命名为 “Methods” 的章节，请抽取所有清晰描述研究方法、实验流程、算法、模型、技术方案等的内容。
+    2. **Must Extract the Entire "Methods" Section**
+      - If the paper has clear section titles such as "Methods", "Materials and Methods", "Methodology", etc., please **extract all content as-is**, starting from that section title until that section officially ends.
+      - If the paper does not have a clearly named "Methods" section, extract all content that clearly describes research methods, experimental procedures, algorithms, models, technical solutions, etc.
 
-    3. **保留原有结构与排版格式**  
-      - 保留原来的段落分行、标题层级、列表、公式标记等文本结构。  
-      - 不要擅自合并或拆分段落，不要改变任何文字顺序。
+    3. **Preserve Original Structure and Layout**
+      - Retain original paragraph breaks, heading hierarchies, lists, formula markings, and other text structures.
+      - Do not merge or split paragraphs without authorization; do not change any word order.
 
-    4. **字符与内容要求**  
-      - 不要引入新的控制字符或特殊符号。  
-      - 尽量去除或避免返回 ASCII 控制字符（例如不可见的换页符、奇怪的转义符等），只保留正常可见文本。  
-      - 不要在内容前后额外添加注释、标签或说明文字。
+    4. **Character and Content Requirements**
+      - Do not introduce new control characters or special symbols.
+      - Try to remove or avoid returning ASCII control characters (such as invisible page breaks, strange escape characters, etc.), only keep normal visible text.
+      - Do not add extra comments, tags, or explanatory text before or after the content.
 
-    5. **输出格式（必须是合法 JSON）**  
-      - 最终回答必须是一个合法 JSON 对象，键为 `"paper_idea"`。  
-      - JSON 字符串中不要出现未转义的换行控制字符或非法字符，避免 JSON 解析错误。  
-      - 内容格式如下（注意是 JSON 而不是自然语言说明）：
+    5. **Output Format (Must be valid JSON)**
+      - The final response must be a valid JSON object with the key `"paper_idea"`.
+      - Do not have unescaped newline control characters or illegal characters in the JSON string to avoid JSON parsing errors.
+      - The content format is as follows (note it's JSON, not a natural language description):
       
     ```json
     {
       "paper_idea": "Paper title: xxx. Paper sections: original text of specific sections of paper...."
     }
+    ```
 """
 
     # Task prompt template for paper content extraction (focused on the methods section)
@@ -2063,303 +2062,303 @@ class PaperIdeaExtractorPrompts:
     1. Focus on extracting the **entire Methods section**: This includes all descriptions of methods, algorithms, models, or techniques used in the paper.
     2. Preserve the **exact structure** and **formatting** of the original content.
     3. If the "Methods" section is not clearly defined, include all content related to methods and techniques used in the paper.
-    4. 去掉多余移除 ASCII 控制字符，尽量以纯文本，形式返回，不要有多余符号，以免json解析错误！！！
+    4. Remove redundant ASCII control characters, return in plain text as much as possible, do not have extra symbols to avoid JSON parsing errors!!!
 
     Paper content: {paper_content}
     """
 
 
 class ChartTypeRecommenderPrompts:
-    """图表类型推荐 Agent 的提示词模板"""
+    """Prompt templates for Chart Type Recommender Agent"""
     
     system_prompt_for_chart_type_recommender = """
-你是一位专业的数据可视化分析师，对统计图表及其应用有深入了解。
+You are a professional data visualization analyst with a deep understanding of statistical charts and their applications.
 
-你的任务是分析从研究论文中提取的表格，并推荐最适合可视化该数据的图表类型。
+Your task is to analyze tables extracted from research papers and recommend the chart type most suitable for visualizing the data.
 
-**指导原则：**
+**Guiding Principles:**
 
-1. **确定表格是否适合制图：**
-   - **首先**，评估此表格是否包含可以可视化的实验/统计数据
-   - 适合制图的表格：性能指标、实验结果、统计比较、趋势数据、分布数据
-   - 不适合制图的表格：定义、分类、文本描述、分类学、没有度量标准的纯分类列表
-   - 如果表格主要是描述性/解释性文本（如“类型”和“描述”列），则不应进行可视化
+1. **Determine if the Table is Suitable for Charting:**
+   - **First**, evaluate whether this table contains experimental/statistical data that can be visualized.
+   - Tables suitable for charting: performance metrics, experimental results, statistical comparisons, trend data, distribution data.
+   - Tables NOT suitable for charting: definitions, classifications, text descriptions, taxonomies, pure categorical lists without metrics.
+   - If a table consists mainly of descriptive/explanatory text (e.g., "Type" and "Description" columns), it should not be visualized.
    
-2. **理解数据结构（如果适合）：**
-   - 分析表头、数据类型（数值型vs分类型）以及行列数量
-   - 识别关键变量及其关系
-   - 考虑数据分布和模式
+2. **Understand Data Structure (if suitable):**
+   - Analyze headers, data types (numerical vs. categorical), and the number of rows and columns.
+   - Identify key variables and their relationships.
+   - Consider data distribution and patterns.
 
-3. **考虑论文背景：**
-   - 表格来自具有特定研究目标的研究论文
-   - 可视化应支持论文的主要观点和发现
-   - 选择最能传达研究信息的图表类型
+3. **Consider the Paper Context:**
+   - The table comes from a research paper with specific research objectives.
+   - The visualization should support the paper's main arguments and findings.
+   - Choose the chart type that best communicates the research message.
 
-4. **推荐合适的图表类型（如果适合）：**
-   - 你需要结合上述的考虑，根据你对统计学和视觉表现的理解，推荐最合适的图表类型。
+4. **Recommend Appropriate Chart Type (if suitable):**
+   - Based on the above considerations and your understanding of statistics and visual representation, recommend the most suitable chart type.
    
-   **重要的可视化原则：**
-   - 当需要精确值比较时，避免使用堆叠柱状图
-   - 当有4个以上指标需要比较时，考虑使用子图（分面）
-   - 优先考虑清晰度而非复杂性——简单往往更好
+   **Important Visualization Principles:**
+   - Avoid using stacked bar charts when precise value comparison is needed.
+   - Consider using subplots (faceting) when there are more than 4 metrics to compare.
+   - Prioritize clarity over complexityâ€”simpler is often better.
 
-5. **提供明确的理由：**
-   - 解释为什么选择这种图表类型
-   - 描述此可视化将揭示哪些见解
-   - 建议哪些列应用于x轴、y轴等
+5. **Provide Clear Justification:**
+   - Explain why this chart type was chosen.
+   - Describe what insights this visualization will reveal.
+   - Suggest which columns should be used for the x-axis, y-axis, etc.
 
-6. **给出图表的视觉描述：**
-   - 使用浅色调和柔和的配色方案
-   - 使用现代美观的图表布局
-   - 明确行/列或特征轴的标签
-   - 明确图表的整体布局（必须）：包括：
-     - 是否使用子图架构
-     - 标题、图例、图表主体都放在哪个区域
+6. **Give a Visual Description of the Chart:**
+   - Use light tones and soft color schemes.
+   - Use a modern, aesthetically pleasing chart layout.
+   - Clear labels for rows/columns or feature axes.
+   - Define the overall layout of the chart (required): including:
+     - Whether a subplot architecture is used.
+     - In which areas the title, legend, and chart body are placed.
 
-6. **输出格式：**
-   返回一个具有以下结构的JSON对象：
+7. **Output Format:**
+   Return a JSON object with the following structure:
    ```json
    {
      "is_suitable_for_chart": True / False,
-     "suitability_reason": "<解释为什么此表格适合或不适合制图>",
-     "chart_type": "<推荐的图表类型，如果不适合制图则为'none'>",
-     "chart_type_reason": "<对于上述说明，详细说明你这样写的原因，如果不适合制图则为'none'>",
-     "chart_desc": "<图表的视觉描述，如果不适合制图则为'none'>",
+     "suitability_reason": "<Explanation of why this table is or is not suitable for charting>",
+     "chart_type": "<Recommended chart type, 'none' if not suitable>",
+     "chart_type_reason": "<Detailed justification for the above, 'none' if not suitable>",
+     "chart_desc": "<Visual description of the chart, 'none' if not suitable>"
    }
    ```
    
-   **关键要求**：
-   - 如果 `is_suitable_for_chart` 为 false，则将 `chart_type`、`chart_type_reason` 和 `chart_desc` 设置为 "none"
-   - 始终提供清晰的 `suitability_reason` 来解释你的决定
+   **Key Requirements**:
+   - If `is_suitable_for_chart` is false, set `chart_type`, `chart_type_reason`, and `chart_desc` to "none".
+   - Always provide a clear `suitability_reason` to explain your decision.
 
-**重要提示**：不要在JSON结构之外输出任何内容。
+**Important Note**: Do not output anything outside the JSON structure.
 """
 
     task_prompt_for_chart_type_recommender = """
-根据以下提供的论文核心思想和表格信息，判断此表格是否适合进行可视化，如果适合，请推荐最合适的图表类型。
+Based on the provided paper's core ideas and table information, judge whether this table is suitable for visualization. If suitable, recommend the most appropriate chart type.
 
-**论文核心思想：**
+**Paper Core Ideas:**
 {paper_idea}
 
-**表格信息：**
-如图片所示
+**Table Information:**
+As shown in the image
 
-**你的任务：**
-1. **首先**，判断此表格是否包含适合统计制图的数据：
-   - 是否为具有可测量指标的实验/统计数据？
-   - 还是纯粹的描述性/解释性文本（定义、分类等）？
+**Your Task:**
+1. **First**, judge whether this table contains data suitable for statistical charting:
+   - Does it have experimental/statistical data with measurable metrics?
+   - Is it purely descriptive/explanatory text (definitions, classifications, etc.)?
    
-2. 如果不适合（例如，仅仅是定义或描述）：
-   - 将 `is_suitable_for_chart` 设置为 false
-   - 将 `chart_type` 设置为 "none"
-   - 提供清晰的 `suitability_reason`
-   - 可以跳过或简化 `data_interpretation` 和 `visualization_config`
+2. If NOT suitable (e.g., just definitions or descriptions):
+   - Set `is_suitable_for_chart` to false
+   - Set `chart_type` to "none"
+   - Provide a clear `suitability_reason`
+   - You can skip or simplify `data_interpretation` and `visualization_config`
    
-3. 如果适合制图：
-   - 将 `is_suitable_for_chart` 设置为 true
-   - 分析表格结构和内容
-   - 考虑此表格如何与论文主要思想相关
-   - 推荐最佳的可视化图表类型
-   - 提供详细的推理和图表配置建议、描述
+3. If suitable for charting:
+   - Set `is_suitable_for_chart` to true
+   - Analyze the table structure and content
+   - Consider how this table relates to the paper's main ideas
+   - Recommend the best visualization chart type
+   - Provide detailed reasoning and chart configuration suggestions/descriptions
    
-4. 仅返回一个遵循系统提示中指定格式的JSON对象
+4. Return only one JSON object following the format specified in the system prompt.
 
-**不适合的表格示例：**
-- 包含“类型”和“描述”列来解释概念的表格
-- 没有度量标准的分类法或分类方案
-- 定义列表
-- 以表格形式组织的纯文本解释
+**Examples of UNSUITABLE tables:**
+- Tables with "Type" and "Description" columns to explain concepts
+- Taxonomy or classification schemes without metrics
+- Lists of definitions
+- Pure text explanations organized in table format
 
-**适合的表格示例：**
-- 具有数字指标的性能对比表
-- 包含测量结果的实验数据表
-- 包含均值、标准差等的统计摘要表
-- 时间序列数据
-- 包含数值的相关性或对比矩阵
+**Examples of SUITABLE tables:**
+- Performance comparison tables with numerical metrics
+- Experimental data tables with measured results
+- Statistical summary tables with means, standard deviations, etc.
+- Time-series data
+- Correlation or comparison matrices with numerical values
 
-提示：在当前表格并**不只**适用于直方图和柱状图的时候，你被鼓励考虑其他比较酷炫、美观、有创意的图表类型，这需要你动脑思考！。
+Tip: When the current table is **not only** suitable for histograms and bar charts, you are encouraged to consider other cool, beautiful, and creative chart types. This requires you to think creatively!
 """
 
 
 class ChartCodeGeneratorPrompts:
-    """图表代码生成 Agent 的提示词模板"""
+    """Prompt templates for Chart Code Generator Agent"""
     
     system_prompt_for_chart_code_generator = """
-你是一位专门从事matplotlib数据可视化的Python专家。
+ä½ æ˜¯ä¸€ä½�ä¸“é—¨ä»Žäº‹matplotlibæ•°æ�®å�¯è§†åŒ–çš„Pythonä¸“å®¶ã€‚
 
-你的任务是根据提供的配置以及表格图片，为论文的表格生成干净、可执行的Python代码，创建高质量的图表。
+ä½ çš„ä»»åŠ¡æ˜¯æ ¹æ�®æ��ä¾›çš„é…�ç½®ä»¥å�Šè¡¨æ ¼å›¾ç‰‡ï¼Œä¸ºè®ºæ–‡çš„è¡¨æ ¼ç”Ÿæˆ�å¹²å‡€ã€�å�¯æ‰§è¡Œçš„Pythonä»£ç �ï¼Œåˆ›å»ºé«˜è´¨é‡�çš„å›¾è¡¨ã€‚
 
-**指导原则：**
+**æŒ‡å¯¼åŽŸåˆ™ï¼š**
 
-1. **代码质量：**
-   - 编写干净、有良好注释的Python代码
-   - 使用matplotlib最佳实践
-   - 优雅地处理边缘情况和潜在错误
-   - 使代码自包含且可执行
+1. **ä»£ç �è´¨é‡�ï¼š**
+   - ç¼–å†™å¹²å‡€ã€�æœ‰è‰¯å¥½æ³¨é‡Šçš„Pythonä»£ç �
+   - ä½¿ç”¨matplotlibæœ€ä½³å®žè·µ
+   - ä¼˜é›…åœ°å¤„ç�†è¾¹ç¼˜æƒ…å†µå’Œæ½œåœ¨é”™è¯¯
+   - ä½¿ä»£ç �è‡ªåŒ…å�«ä¸”å�¯æ‰§è¡Œ
 
-2. **必需的库：**
-   - **必须**使用seaborn进行样式设计和可视化（import seaborn as sns）
-   - 根据需要导入matplotlib.pyplot、numpy、pandas
-   - 仅使用标准科学Python库（matplotlib、seaborn、numpy、pandas）
-   - 在开始时设置seaborn样式：`sns.set_style('whitegrid')` 或 `sns.set_style('white')`
+2. **å¿…éœ€çš„åº“ï¼š**
+   - **å¿…é¡»**ä½¿ç”¨seabornè¿›è¡Œæ ·å¼�è®¾è®¡å’Œå�¯è§†åŒ–ï¼ˆimport seaborn as snsï¼‰
+   - æ ¹æ�®éœ€è¦�å¯¼å…¥matplotlib.pyplotã€�numpyã€�pandas
+   - ä»…ä½¿ç”¨æ ‡å‡†ç§‘å­¦Pythonåº“ï¼ˆmatplotlibã€�seabornã€�numpyã€�pandasï¼‰
+   - åœ¨å¼€å§‹æ—¶è®¾ç½®seabornæ ·å¼�ï¼š`sns.set_style('whitegrid')` æˆ– `sns.set_style('white')`
 
-4. **图表样式设计（关键）：**
-   - **核心原则：清晰度高于一切** - 图表必须立即可读且无歧义
-   - **必须使用seaborn**进行专业样式设计（`import seaborn as sns`）
-   - **必须使用浅色配色板**：'pastel'、'light'、'muted'、'Set2'、'Set3'
-   - 设置seaborn样式：`sns.set_style('whitegrid')` 或 `sns.set_style('white')`
-   - 使用适当的图形大小（越大越清晰）
-   - 使用 `plt.tight_layout()` 进行干净的间距调整
-   - 对于太长的表格标签，可以进行简写以及旋转
+4. **å›¾è¡¨æ ·å¼�è®¾è®¡ï¼ˆå…³é”®ï¼‰ï¼š**
+   - **æ ¸å¿ƒåŽŸåˆ™ï¼šæ¸…æ™°åº¦é«˜äºŽä¸€åˆ‡** - å›¾è¡¨å¿…é¡»ç«‹å�³å�¯è¯»ä¸”æ— æ­§ä¹‰
+   - **å¿…é¡»ä½¿ç”¨seaborn**è¿›è¡Œä¸“ä¸šæ ·å¼�è®¾è®¡ï¼ˆ`import seaborn as sns`ï¼‰
+   - **å¿…é¡»ä½¿ç”¨æµ…è‰²é…�è‰²æ�¿**ï¼š'pastel'ã€�'light'ã€�'muted'ã€�'Set2'ã€�'Set3'
+   - è®¾ç½®seabornæ ·å¼�ï¼š`sns.set_style('whitegrid')` æˆ– `sns.set_style('white')`
+   - ä½¿ç”¨é€‚å½“çš„å›¾å½¢å¤§å°�ï¼ˆè¶Šå¤§è¶Šæ¸…æ™°ï¼‰
+   - ä½¿ç”¨ `plt.tight_layout()` è¿›è¡Œå¹²å‡€çš„é—´è·�è°ƒæ•´
+   - å¯¹äºŽå¤ªé•¿çš„è¡¨æ ¼æ ‡ç­¾ï¼Œå�¯ä»¥è¿›è¡Œç®€å†™ä»¥å�Šæ—‹è½¬
    
-   **可视化逻辑：**
-   - **指标太多？** → 拆分为子图（每个子图一个指标）
-   - **需要比较值？** → 使用分组柱状图，永远不要使用堆叠柱状图
-   - **数据重叠？** → 增加图形大小或使用子图
-   - **标签难以阅读？** → 旋转、调整大小或缩写
-   - 有疑问时，选择更简单、更清晰的选项
+   **å�¯è§†åŒ–é€»è¾‘ï¼š**
+   - **æŒ‡æ ‡å¤ªå¤šï¼Ÿ** â†’ æ‹†åˆ†ä¸ºå­�å›¾ï¼ˆæ¯�ä¸ªå­�å›¾ä¸€ä¸ªæŒ‡æ ‡ï¼‰
+   - **éœ€è¦�æ¯”è¾ƒå€¼ï¼Ÿ** â†’ ä½¿ç”¨åˆ†ç»„æŸ±çŠ¶å›¾ï¼Œæ°¸è¿œä¸�è¦�ä½¿ç”¨å †å� æŸ±çŠ¶å›¾
+   - **æ•°æ�®é‡�å� ï¼Ÿ** â†’ å¢žåŠ å›¾å½¢å¤§å°�æˆ–ä½¿ç”¨å­�å›¾
+   - **æ ‡ç­¾éš¾ä»¥é˜…è¯»ï¼Ÿ** â†’ æ—‹è½¬ã€�è°ƒæ•´å¤§å°�æˆ–ç¼©å†™
+   - æœ‰ç–‘é—®æ—¶ï¼Œé€‰æ‹©æ›´ç®€å�•ã€�æ›´æ¸…æ™°çš„é€‰é¡¹
 
-5. **错误处理：**
-   - 包含try-except块以提高健壮性
-   - 如果数据格式意外，提供备用可视化
+5. **é”™è¯¯å¤„ç�†ï¼š**
+   - åŒ…å�«try-exceptå�—ä»¥æ��é«˜å�¥å£®æ€§
+   - å¦‚æžœæ•°æ�®æ ¼å¼�æ„�å¤–ï¼Œæ��ä¾›å¤‡ç”¨å�¯è§†åŒ–
 
-6. **输出格式：**
-   返回具有以下结构的JSON对象：
+6. **è¾“å‡ºæ ¼å¼�ï¼š**
+   è¿”å›žå…·æœ‰ä»¥ä¸‹ç»“æž„çš„JSONå¯¹è±¡ï¼š
    ```json
    {
-     "code": "<完整的Python代码字符串>",
-     "description": "<代码功能的简要描述>"
+     "code": "<å®Œæ•´çš„Pythonä»£ç �å­—ç¬¦ä¸²>",
+     "description": "<ä»£ç �åŠŸèƒ½çš„ç®€è¦�æ��è¿°>"
    }
    ```
 
-**重要规则：**
-- 代码必须直接可执行，包含main逻辑，无需函数调用
-- 要么编写内联代码，要么定义函数并立即调用
-- 代码必须使用 `plt.savefig(output_path)` 保存图表，其中output_path是一个变量
-- 不要在代码中包含 `plt.show()`
-- 不要在JSON结构之外提供任何解释
-- 代码应该是生产就绪的，可以直接执行
-- 记住：output_path将在执行环境中作为变量提供，你可以直接使用
+**é‡�è¦�è§„åˆ™ï¼š**
+- ä»£ç �å¿…é¡»ç›´æŽ¥å�¯æ‰§è¡Œï¼ŒåŒ…å�«mainé€»è¾‘ï¼Œæ— éœ€å‡½æ•°è°ƒç”¨
+- è¦�ä¹ˆç¼–å†™å†…è�”ä»£ç �ï¼Œè¦�ä¹ˆå®šä¹‰å‡½æ•°å¹¶ç«‹å�³è°ƒç”¨
+- ä»£ç �å¿…é¡»ä½¿ç”¨ `plt.savefig(output_path)` ä¿�å­˜å›¾è¡¨ï¼Œå…¶ä¸­output_pathæ˜¯ä¸€ä¸ªå�˜é‡�
+- ä¸�è¦�åœ¨ä»£ç �ä¸­åŒ…å�« `plt.show()`
+- ä¸�è¦�åœ¨JSONç»“æž„ä¹‹å¤–æ��ä¾›ä»»ä½•è§£é‡Š
+- ä»£ç �åº”è¯¥æ˜¯ç”Ÿäº§å°±ç»ªçš„ï¼Œå�¯ä»¥ç›´æŽ¥æ‰§è¡Œ
+- è®°ä½�ï¼šoutput_pathå°†åœ¨æ‰§è¡ŒçŽ¯å¢ƒä¸­ä½œä¸ºå�˜é‡�æ��ä¾›ï¼Œä½ å�¯ä»¥ç›´æŽ¥ä½¿ç”¨
 
-**关键数据访问规则：**
-- 仅`output_path`变量是保证存在的，其他变量需要自己定义
+**å…³é”®æ•°æ�®è®¿é—®è§„åˆ™ï¼š**
+- ä»…`output_path`å�˜é‡�æ˜¯ä¿�è¯�å­˜åœ¨çš„ï¼Œå…¶ä»–å�˜é‡�éœ€è¦�è‡ªå·±å®šä¹‰
 """
 
     task_prompt_for_chart_code_generator = """
-根据下面提供的配置以及表格图片，生成matplotlib Python代码来创建图表。
+Based on the configuration and table image provided below, generate matplotlib Python code to create a chart.
 
-**论文核心思想：**
+**Paper Core Ideas:**
 {paper_idea}
 
-**图表配置：**
+**Chart Configuration:**
 {chart_config}
 
-**表格注释：**
+**Table Caption:**
 {table_caption}
 
-**你的任务：**
-1. 生成完整、可执行的Python代码，该代码应：
-   - 创建指定类型的图表
-   - 使用表格中的数据
-   - 遵循可视化配置
-   - 使用plt.savefig(output_path)保存图表
+**Your Task:**
+1. Generate complete, executable Python code that:
+   - Creates the specified type of chart
+   - Uses data from the table
+   - Follows visualization configurations
+   - Saves the chart using plt.savefig(output_path)
 
-2. 代码将在已定义以下变量的环境中执行：
-   - `output_path`：保存图表的字符串路径
+2. The code will be executed in an environment where the following variables are defined:
+   - `output_path`: String path to save the chart
 
-3. 代码结构选项：
-   - 选项A：直接编写内联代码（推荐）
-   - 选项B：定义函数并立即调用，如下所示：
+3. Code structure options:
+   - Option A: Write inline code directly (recommended)
+   - Option B: Define a function and call it immediately, like this:
      ```python
      def create_chart():
-         # ... 图表代码 ...
+         # ... chart code ...
          plt.savefig(output_path)
      
      if __name__ == "__main__":
-         create_chart()  # 必须调用函数！
+         create_chart()  # Must call the function!
      ```
 
-4. 代码应满足以下要求：
-   - 包含所有必要的导入语句，自包含
-   - 包含错误处理
-   - 创建专业、出版质量的图表
-   - 直接使用变量output_path和表格里的数据
+4. The code should meet the following requirements:
+   - Contain all necessary import statements, self-contained
+   - Include error handling
+   - Create professional, publication-quality charts
+   - Directly use variable output_path and data from the table
 
-5. **样式要求：**
-   - 使用seaborn和浅色、美观的设计
-   - 在保存前使用适当的图形大小和紧凑布局
+5. **Styling Requirements:**
+   - Use seaborn and a light, aesthetically pleasing design
+   - Use appropriate figure sizes and tight layouts before saving
 
-6. **图表类型决策规则：**
-   - **黄金法则**：如果不清楚使用哪种方式，问"读者能否轻松看到确切值？"如果不能，就简化。
+6. **Chart Type Decision Rule:**
+   - **Golden Rule**: If unsure which way to use, ask "can the reader easily see the exact values?" If not, simplify.
    
-7. 仅返回系统提示中指定的包含"code"和"description"字段的JSON对象
+7. Return only a JSON object containing "code" and "description" fields as specified in the system prompt.
 
-**关键**：代码必须实际执行并保存图表。不要只定义函数而不调用它们！
+**Key**: The code must actually execute and save the chart. Do not just define functions without calling them!
 """
 
 
 
 class TableTextRendererPrompts:
-    """表格文本渲染 Agent 的提示词模板"""
+    """Prompt templates for Table Text Renderer Agent"""
     
     system_prompt_for_table_text_renderer = """
-你是一位专门从事表格可视化的 Python 专家，擅长将各种格式的表格文本渲染为专业美观的表格图片。
+You are a Python expert specializing in table visualization, skilled at rendering various formats of table text into professional and beautiful table images.
 
-你的任务是：
-1. 分析输入的表格文本，识别其结构（包括多级表头、合并单元格等复杂结构）
-2. 生成 matplotlib Python 代码来渲染表格图片
+Your task is to:
+1. Analyze the input table text and identify its structure (including complex structures like multi-level headers, merged cells, etc.).
+2. Generate matplotlib Python code to render the table image.
 
-**支持的表格格式：**
-- LaTeX 表格（\\begin{tabular}...\\end{tabular}，支持 \\multirow、\\multicolumn）
-- Markdown 表格（使用 | 分隔）
-- CSV 格式（逗号分隔）
-- TSV 格式（Tab 分隔）
-- 纯文本表格（空格分隔）
+**Supported Table Formats:**
+- LaTeX tables (\\begin{tabular}...\\end{tabular}, supporting \\multirow, \\multicolumn)
+- Markdown tables (using | as delimiter)
+- CSV format (comma-separated)
+- TSV format (tab-separated)
+- Plain text tables (space-separated)
 
-**表格结构分析要点：**
-1. **多级表头识别：**
-   - LaTeX: \\multicolumn{n}{c}{text} 表示跨 n 列合并
-   - LaTeX: \\multirow{n}{*}{text} 表示跨 n 行合并
-   - \\cline{a-b} 表示部分水平线
+**Key Points for Table Structure Analysis:**
+1. **Multi-level Header Identification:**
+   - LaTeX: \\multicolumn{n}{c}{text} indicates merging across n columns.
+   - LaTeX: \\multirow{n}{*}{text} indicates merging across n rows.
+   - \\cline{a-b} indicates partial horizontal lines.
    
-2. **数据提取：**
-   - 正确解析每个单元格的内容
-   - 处理特殊格式（如 \\textbf{} 加粗）
-   - 识别数值和文本
+2. **Data Extraction:**
+   - Correctly parse the content of each cell.
+   - Handle special formatting (such as \\textbf{} for bold).
+   - Identify numerical vs. text data.
 
-**代码生成要求：**
+**Code Generation Requirements:**
 
-1. **对简单表格（无合并单元格）：**
-   - 使用 ax.table() 快速绘制
+1. **For Simple Tables (no merged cells):**
+   - Use `ax.table()` for quick drawing.
    
-2. **对复杂表格（有多级表头/合并单元格）：**
-   - 使用 matplotlib 底层 API（ax.add_patch, ax.text）精确控制
-   - 正确计算合并单元格的位置和大小
-   - 绘制适当的边框线
+2. **For Complex Tables (with multi-level headers/merged cells):**
+   - Use matplotlib low-level API (`ax.add_patch`, `ax.text`) for precise control.
+   - Correctly calculate the position and size of merged cells.
+   - Draw appropriate border lines.
 
-3. **样式要求：**
-   - 表头：深色背景（#4472C4），白色加粗文字
-   - 数据行：斑马纹效果（#D9E2F3 和白色交替）
-   - 边框：清晰的黑色边框
-   - 字体：清晰易读，大小适中
-   - 自动调整图片尺寸以适应内容
+3. **Styling Requirements:**
+   - Headers: Dark background (#4472C4), white bold text.
+   - Data rows: Zebra-stripe effect (#D9E2F3 and white alternating).
+   - Borders: Clear black borders.
+   - Font: Clear and readable, appropriate size.
+   - Automatically adjust image dimensions to fit the content.
 
-4. **代码规范：**
-   - 包含所有必要的 import 语句
-   - 使用 `output_path` 变量保存图片（已预定义）
-   - 使用 dpi=150，bbox_inches='tight'
-   - 不要包含 plt.show()
+4. **Code Specifications:**
+   - Include all necessary import statements.
+   - Use the `output_path` variable to save the image (pre-defined).
+   - Use dpi=150, bbox_inches='tight'.
+   - Do not include `plt.show()`.
 
-**输出格式：**
-返回 JSON 对象：
+**Output Format:**
+Return a JSON object:
 ```json
 {
-  "code": "<完整的 Python 代码>",
+  "code": "<Complete Python code>",
   "table_structure": {
     "has_multi_level_header": true/false,
     "header_levels": 1,
-    "headers": ["列1", "列2"],
-    "rows": [["值1", "值2"]],
+    "headers": ["Col 1", "Col 2"],
+    "rows": [["Val 1", "Val 2"]],
     "merged_cells": []
   }
 }
@@ -2367,74 +2366,74 @@ class TableTextRendererPrompts:
 """
 
     task_prompt_for_table_text_renderer = """
-请分析以下表格文本，生成 matplotlib Python 代码来渲染专业美观的表格图片。
+Please analyze the following table text and generate matplotlib Python code to render a professional and beautiful table image.
 
-**表格文本：**
+**Table Text:**
 ```
 {table_text}
 ```
 
-**表格标题：** {table_title}
+**Table Title:** {table_title}
 
-**输出路径：** {output_path}
+**Output Path:** {output_path}
 
-**你的任务：**
+**Your Task:**
 
-1. **分析表格结构：**
-   - 识别表格格式（LaTeX/Markdown/CSV 等）
-   - 检测是否有多级表头或合并单元格
-   - 提取表头和数据行
+1. **Analyze Table Structure:**
+   - Identify table format (LaTeX/Markdown/CSV, etc.)
+   - Detect if there are multi-level headers or merged cells
+   - Extract headers and data rows
 
-2. **生成渲染代码：**
-   - 如果是简单表格，使用 ax.table()
-   - 如果有多级表头/合并单元格，使用底层绘图 API 精确控制
-   - 确保代码可直接执行
+2. **Generate Rendering Code:**
+   - For simple tables, use `ax.table()`.
+   - For tables with multi-level headers or merged cells, use low-level drawing APIs for precise control.
+   - Ensure the code is directly executable.
 
-3. **样式要求：**
-   - 表头使用深色背景（#4472C4），白色加粗文字
-   - 数据行使用斑马纹效果
-   - 如果有标题，在表格上方居中显示
-   - 自动调整尺寸
+3. **Styling Requirements:**
+   - Use a dark background (#4472C4) with white bold text for headers.
+   - Use zebra-striping for data rows.
+   - If there is a title, display it centered above the table.
+   - Automatically adjust dimensions.
 
-4. **代码要求：**
-   - 必须使用上面提供的输出路径 `{output_path}` 保存图片
-   - 不要自己定义 output_path 变量，直接使用字符串路径
-   - 包含所有 import 语句
-   - 不要包含 plt.show()
+4. **Code Requirements:**
+   - Must save the image using the output path `{output_path}` provided above.
+   - Do not define your own `output_path` variable; use the provided string path directly.
+   - Include all `import` statements.
+   - Do not include `plt.show()`.
 
-请返回包含 "code" 和 "table_structure" 字段的 JSON 对象。
+Please return a JSON object containing the "code" and "table_structure" fields.
 """
 
 
 class TableSplitterPrompts:
-    """表格分割 Agent 的提示词模板"""
+    """Prompt templates for Table Splitter Agent"""
     
     system_prompt_for_table_splitter = """
-你是一位专门分析文本中表格的专家。
+You are an expert in analyzing tables within text.
 
-你的任务是识别输入文本中包含的所有表格，并将它们分割成独立的部分。
+Your task is to identify all tables contained in the input text and split them into independent parts.
 
-**支持的表格格式：**
-- LaTeX 表格（\\begin{tabular}...\\end{tabular}）
-- Markdown 表格（使用 | 分隔）
-- CSV 格式（逗号分隔）
-- TSV 格式（Tab 分隔）
-- 纯文本表格（空格对齐）
+**Supported Table Formats:**
+- LaTeX tables (\\begin{tabular}...\\end{tabular})
+- Markdown tables (using | as delimiter)
+- CSV format (comma-separated)
+- TSV format (tab-separated)
+- Plain text tables (aligned with spaces)
 
-**分割规则：**
-1. 每个独立的表格作为一个单独的条目
-2. 保持表格文本的原始格式，不要修改
-3. 如果表格前有标题或说明文字，提取到 caption 字段
-4. 如果只有一个表格，也要返回数组格式
+**Splitting Rules:**
+1. Each independent table is treated as a single entry.
+2. Maintain the original format of the table text; do not modify it.
+3. If there is a caption or explanatory text before the table, extract it into the `caption` field.
+4. Even if there is only one table, return it in array format.
 
-**输出格式：**
-返回 JSON 对象：
+**Output Format:**
+Return a JSON object:
 ```json
 {
   "tables": [
     {
-      "text": "完整的表格文本（保持原格式）",
-      "caption": "表格标题（如果有）"
+      "text": "Complete table text (maintain original format)",
+      "caption": "Table caption (if any)"
     }
   ]
 }
@@ -2442,30 +2441,30 @@ class TableSplitterPrompts:
 """
 
     task_prompt_for_table_splitter = """
-请分析以下文本，识别并分割其中包含的所有表格。
+Please analyze the following text to identify and split all tables contained within it.
 
-**输入文本：**
+**Input Text:**
 ```
 {input_text}
 ```
 
-**你的任务：**
-1. 识别文本中的所有表格
-2. 将每个表格分割成独立的条目
-3. 保持表格文本的原始格式
-4. 提取表格标题（如果有）
+**Your Task:**
+1. Identify all tables in the text.
+2. Split each table into independent entries.
+3. Maintain the original format of the table text.
+4. Extract the table caption (if any).
 
-请返回包含 "tables" 字段的 JSON 对象。
+Please return a JSON object containing the "tables" field.
 """
 
 
 # --------------------------------------------------------------------------- #
-# Draw.io 图表生成                                                            #
+# Draw.io Diagram Generation                                                  #
 # --------------------------------------------------------------------------- #
 class DrawioPrompts:
-    """Draw.io 图表生成相关的提示词模板"""
+    """Prompt templates related to Draw.io diagram generation"""
 
-    # 从 drawio_system_prompt 模块导入模板
+    # Import templates from drawio_system_prompt module
     from workflow_engine.promptstemplates.drawio_system_prompt import (
         system_prompt_for_diagram_planner,
         task_prompt_for_diagram_planner,

@@ -1,7 +1,7 @@
 """
-网页搜索工具，与 Paper2Any 一致。
-支持 SerpAPI（engine=google 或 engine=baidu）、Google CSE、Brave、博查 Bocha。
-并提供 fetch_page_text 抓取网页正文供来源详情展示。
+Web search tool, consistent with Paper2Any.
+Supports SerpAPI (engine=google or engine=baidu), Google CSE, Brave, Bocha.
+Provides fetch_page_text to crawl the main text of a webpage for source details display.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def _strip_html(html: str) -> str:
 
 def fetch_page_text(url: str, max_chars: int = 50000) -> str:
     """
-    抓取 URL 对应页面的 HTML 并提取正文文本，用于来源详情展示。
+    Crawls many URLs corresponding to the page's HTML and extracts the main text for source details display.
     """
     if not url or not url.strip().startswith(("http://", "https://")):
         return ""
@@ -57,14 +57,14 @@ def fetch_page_text(url: str, max_chars: int = 50000) -> str:
             resp.raise_for_status()
             content_type = (resp.headers.get("content-type") or "").lower()
             if "text/html" not in content_type:
-                return "[非 HTML 页面，无法解析正文]"
+                return "[Not an HTML page, cannot parse content]"
             html = resp.text
     except Exception as e:
-        return f"[抓取失败: {e}]"
+        return f"[Crawl failed: {e}]"
     text = _strip_html(html)
     if max_chars and len(text) > max_chars:
-        return text[:max_chars] + "\n\n... (已截断)"
-    return text or "[页面无正文内容]"
+        return text[:max_chars] + "\n\n... (Truncated)"
+    return text or "[Page has no main content]"
 
 BOCHA_WEB_SEARCH_URL = "https://api.bocha.cn/v1/web-search"
 
@@ -79,8 +79,8 @@ def _safe_domain(url: str) -> str:
 
 def serpapi_search(query: str, api_key: str, engine: str = "google", num: int = 10) -> List[Dict[str, Any]]:
     """
-    SerpAPI 搜索，支持 Google 与百度（engine="google" | "baidu"）。
-    返回与 Fast Research 一致的格式: [{ "title", "link", "snippet" }]。
+    SerpAPI search, supports Google and Baidu (engine="google" | "baidu").
+    Returns in 1:1 format with Fast Research: [{ "title", "link", "snippet" }].
     """
     params = {
         "engine": engine,
@@ -167,9 +167,9 @@ def bocha_web_search(
     freshness: str = "noLimit",
 ) -> List[Dict[str, Any]]:
     """
-    博查 AI 网页搜索 API（https://api.bocha.cn/v1/web-search）。
-    鉴权：Authorization: Bearer {API KEY}。
-    返回统一格式: [{ "title", "link", "snippet" }]，snippet 优先用 summary 字段。
+    Bocha AI Web Search API (https://api.bocha.cn/v1/web-search).
+    Auth: Authorization: Bearer {API KEY}.
+    Returns unified format: [{ "title", "link", "snippet" }], snippet prioritizes summary field.
     """
     from workflow_engine.logger import get_logger
     log = get_logger(__name__)
@@ -185,7 +185,7 @@ def bocha_web_search(
         "Content-Type": "application/json",
     }
 
-    log.debug(f"博查搜索请求: query={query[:100]}, count={count}")
+    log.debug(f"Bocha search request: query={query[:100]}, count={count}")
 
     try:
         with httpx.Client(timeout=25) as client:
@@ -193,32 +193,32 @@ def bocha_web_search(
             resp.raise_for_status()
             body = resp.json()
     except httpx.HTTPStatusError as e:
-        log.error(f"博查 API HTTP 错误: {e.response.status_code}, {e.response.text[:200]}")
-        raise RuntimeError(f"博查 API 请求失败: HTTP {e.response.status_code}")
+        log.error(f"Bocha API HTTP error: {e.response.status_code}, {e.response.text[:200]}")
+        raise RuntimeError(f"Bocha API request failed: HTTP {e.response.status_code}")
     except Exception as e:
-        log.error(f"博查 API 请求异常: {type(e).__name__}: {str(e)}")
+        log.error(f"Bocha API request exception: {type(e).__name__}: {str(e)}")
         raise
-
-    # 检查响应码
+    
+    # Check response code
     code = body.get("code")
     if code != 200:
-        msg = body.get("msg") or body.get("message") or "未知错误"
-        log.error(f"博查 API 返回错误: code={code}, message={msg}")
-        raise RuntimeError(f"博查 API 返回 code={code}: {msg}")
+        msg = body.get("msg") or body.get("message") or "Unknown error"
+        log.error(f"Bocha API returned error: code={code}, message={msg}")
+        raise RuntimeError(f"Bocha API returned code={code}: {msg}")
 
-    # 解析响应数据
+    # Parse response data
     data = body.get("data")
     if not data:
-        log.warning("博查 API 响应中没有 data 字段")
+        log.warning("No data field in Bocha API response")
         return []
 
     web_pages = data.get("webPages")
     if not web_pages:
-        log.warning("博查 API 响应中没有 webPages 字段")
+        log.warning("No webPages field in Bocha API response")
         return []
 
     items = web_pages.get("value") or []
-    log.info(f"博查搜索返回 {len(items)} 条结果")
+    log.info(f"Bocha search returned {len(items)} results")
 
     results: List[Dict[str, Any]] = []
     for item in items[:count]:
@@ -234,5 +234,5 @@ def bocha_web_search(
             "source": _safe_domain(url),
         })
 
-    log.debug(f"博查搜索成功返回 {len(results)} 条有效结果")
+    log.debug(f"Bocha search successfully returned {len(results)} valid results")
     return results

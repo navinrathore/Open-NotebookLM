@@ -144,7 +144,7 @@ class BaseAgent(ABC):
     """
 
     # =========================================================================
-    # A. 类初始化与工厂方法
+    # A. Class Initialization and Factory Methods
     # =========================================================================
 
     def __init_subclass__(cls, **kwargs):
@@ -168,14 +168,14 @@ class BaseAgent(ABC):
         """
         super().__init_subclass__(**kwargs)
         try:
-            # 创建临时实例以获取 role_name
+            # Create temporary instance to get role_name
             tmp = cls(tool_manager=None)
             name = tmp.role_name
-            # 注册到 AgentRegistry
+            # Register to AgentRegistry
             from workflow_engine.agentroles.cores.registry import AgentRegistry
             AgentRegistry.register(name.lower(), cls)
         except Exception as e:
-            # 静默失败，允许抽象子类
+            # Silent failure, allow abstract subclasses
             pass
     
     def __init__(self, 
@@ -276,7 +276,7 @@ class BaseAgent(ABC):
         return cls(tool_manager=tool_manager, **kwargs)
 
     # =========================================================================
-    # B. 抽象属性 - 子类必须实现
+    # B. Abstract Properties - Subclasses must implement
     # =========================================================================
     
     @property
@@ -333,7 +333,7 @@ class BaseAgent(ABC):
         pass
 
     # =========================================================================
-    # C. 解析器相关
+    # C. Parser Related
     # =========================================================================
     
     @property
@@ -404,7 +404,7 @@ class BaseAgent(ABC):
             return {"raw": content, "error": str(e)}
 
     # =========================================================================
-    # D. 消息构建
+    # D. Message Construction
     # =========================================================================
     
     def build_messages(self, 
@@ -491,7 +491,7 @@ class BaseAgent(ABC):
         return f"{self.vlm_config.get('prompt', '')}"
 
     # =========================================================================
-    # E. LLM 创建与调用
+    # E. LLM Creation and Calling
     # =========================================================================
     
     def get_llm_caller(self, state: MainState) -> BaseLLMCaller:
@@ -604,7 +604,7 @@ class BaseAgent(ABC):
             raise
 
     # =========================================================================
-    # F. 工具管理
+    # F. Tool Management
     # =========================================================================
     
     async def execute_pre_tools(self, state: MainState) -> Dict[str, Any]:
@@ -655,7 +655,7 @@ class BaseAgent(ABC):
         
         tools = self.tool_manager.get_post_tools(self.role_name)
         
-        # 去重
+        # Deduplicate
         uniq, seen = [], set()
         for t in tools:
             if t.name not in seen:
@@ -695,7 +695,7 @@ class BaseAgent(ABC):
         return hasattr(message, 'tool_calls') and bool(getattr(message, 'tool_calls', None))
 
     # =========================================================================
-    # G. 执行模式 - 简单模式
+    # G. Execution Mode - Simple Mode
     # =========================================================================
     
     async def process_simple_mode(self, state: MainState, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
@@ -752,7 +752,7 @@ class BaseAgent(ABC):
         return self.parse_result(answer_text)
 
     # =========================================================================
-    # G. 执行模式 - ReAct 模式
+    # G. Execution Mode - ReAct Mode
     # =========================================================================
     
     async def process_react_mode(self, state: MainState, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
@@ -798,146 +798,146 @@ class BaseAgent(ABC):
                 log.info(f"ReAct Attempt {attempt + 1}/{self.react_max_retries + 1}")
                 answer_msg = await llm.ainvoke(messages)
                 answer_text = answer_msg.content
-                log.info(f'LLM原始输出：{answer_text[:200]}...' if len(answer_text) > 200 else f'LLM原始输出：{answer_text}')
+                log.info(f"LLM Raw Output: {answer_text[:200]}..." if len(answer_text) > 200 else f"LLM Raw Output: {answer_text}")
                 
-                # 解析结果
+                # Parse results
                 parsed_result = self.parse_result(answer_text)
                 
-                # 运行验证器
+                # Run validators
                 all_passed, errors = self._run_validators(answer_text, parsed_result)
                 
                 if all_passed:
-                    log.info(f"✓ {self.role_name} ReAct验证通过，共尝试 {attempt + 1} 次")
+                    log.info(f"✓ {self.role_name} ReAct validation passed, total attempts: {attempt + 1}")
                     
-                    # 更新消息历史
+                    # Update message history
                     if not self.ignore_history:
                         self.message_history.add_messages([answer_msg])
-                        log.info("已更新消息历史")
+                        log.info("Message history updated")
                     
                     return parsed_result
                 
-                # 验证未通过
+                # Validation failed
                 if attempt < self.react_max_retries:
-                    # 构建反馈消息
+                    # Build feedback message
                     feedback = self._build_validation_feedback(errors)
-                    log.warning(f"[process_react_mode] : 验证未通过 (尝试 {attempt + 1}): {feedback}")
+                    log.warning(f"[process_react_mode] : Validation failed (Attempt {attempt + 1}): {feedback}")
                     
-                    # 添加 LLM 的回复和人类的反馈到消息列表
+                    # Add LLM response and human feedback to message list
                     messages.append(AIMessage(content=answer_text))
                     messages.append(HumanMessage(content=feedback))
                 else:
-                    # 达到最大重试次数
-                    log.error(f"[process_react_mode] : {self.role_name} ReAct达到最大重试次数，验证仍未通过")
+                    # Reached maximum retries
+                    log.error(f"[process_react_mode] : {self.role_name} ReAct reached maximum retries, validation still failed")
                     return {
-                        "error": "ReAct验证失败",
+                        "error": "ReAct validation failed",
                         "attempts": attempt + 1,
                         "last_errors": errors,
                         "last_result": parsed_result
                     }
                     
             except Exception as e:
-                log.exception(f"ReAct模式LLM调用失败 (尝试 {attempt + 1}): {e}")
+                log.exception(f"ReAct mode LLM call failed (Attempt {attempt + 1}): {e}")
                 if attempt >= self.react_max_retries:
-                    return {"error": f"LLM调用失败: {str(e)}"}
-                # 继续重试
+                    return {"error": f"LLM call failed: {str(e)}"}
+                # Continue retry
                 continue
         
-        # 理论上不会到这里
-        return {"error": "ReAct处理异常终止"}
+        # Theoretically should not reach here
+        return {"error": "ReAct processing terminated abnormally"}
 
     # =========================================================================
-    # G. 执行模式 - 并行模式
+    # G. Execution Mode - Parallel Mode
     # =========================================================================
     
     async def process_parallel_mode(self, state: MainState, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
         """
-        并行模式处理 - 并发执行多个 LLM 调用
+        Parallel mode processing - Concurrent execution of multiple LLM calls
         
-        自动检测前置工具结果中的列表数据，对每个元素并行调用 LLM。
+        Automatically detect list data in pre-tool results and call LLM in parallel for each element.
         
         Args:
-            state (MainState): 当前状态对象
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            state (MainState): Current state object
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            Dict[str, Any]: 包含所有并行结果的字典
-                - parallel_results: 结果列表
-                - total_processed: 处理总数
+            Dict[str, Any]: Dictionary containing all parallel results
+                - parallel_results: Result list
+                - total_processed: Total processed
         
-        数据检测优先级：
-            1. pre_tool_results 本身是列表
-            2. 包含 "parallel_items" 字段
-            3. 任意值为列表的字段（取第一个非空列表）
+        Data detection priority:
+            1. pre_tool_results is a list itself
+            2. Contains "parallel_items" field
+            3. Any field with a list value (take the first non-empty list)
         """
-        log.info(f"执行 {self.role_name} 并行模式...")
+        log.info(f"Executing {self.role_name} parallel mode...")
         
-        # ----- 智能检测并行数据 -----
+        # ----- Intelligent parallel data detection -----
         parallel_items = []
         
-        # 情况1: pre_tool_results 本身是列表
+        # Case 1: pre_tool_results is a list itself
         if isinstance(pre_tool_results, list):
             parallel_items = pre_tool_results
         
-        # 情况2: 有明确的 parallel_items 字段
+        # Case 2: Specific "parallel_items" field exists
         elif "parallel_items" in pre_tool_results:
             parallel_items = pre_tool_results["parallel_items"]
         
-        # 情况3: 检查任意值为列表的字段
+        # Case 3: Check any field with a list value
         elif isinstance(pre_tool_results, dict):
             for key, value in pre_tool_results.items():
                 if isinstance(value, list) and value and all(isinstance(item, dict) for item in value):
                     parallel_items = value
                     break
         
-        log.critical(f"[process_parallel_mode 并行数据] : {pre_tool_results}")
+        log.critical(f"[process_parallel_mode parallel data] : {pre_tool_results}")
         
-        # 如果没有找到合适的并行数据，回退到简单模式
+        # If no suitable parallel data found, fall back to simple mode
         if not parallel_items:
-            log.warning("未找到合适的并行数据，回退到简单模式")
+            log.warning("No suitable parallel data found, falling back to simple mode")
             return await self.process_simple_mode(state, pre_tool_results)
         
-        log.info(f"找到 {len(parallel_items)} 条数据用于并行处理")
+        log.info(f"Found {len(parallel_items)} items for parallel processing")
         
-        # ----- 获取并发限制 -----
-        concurrency_limit = 5  # 默认值
+        # ----- Get concurrency limit -----
+        concurrency_limit = 5  # Default value
         if hasattr(self, '_execution_strategy') and hasattr(self._execution_strategy, 'config'):
             if hasattr(self._execution_strategy.config, 'concurrency_limit'):
                 concurrency_limit = self._execution_strategy.config.concurrency_limit
         
-        # 创建信号量控制并发
+        # Create semaphore to control concurrency
         semaphore = asyncio.Semaphore(concurrency_limit)
         
-        # ----- 定义单个并行任务处理函数 -----
+        # ----- Define single parallel task handler -----
         async def process_item(item: dict) -> dict:
-            """处理单个并行项"""
+            """Process a single parallel item"""
             async with semaphore:
                 try:
-                    # 为每个并行项创建独立的上下文
+                    # Create independent context for each parallel item
                     item_pre_tool_results = {}
                     
-                    # 先保留原始前置工具结果中的非列表字段
+                    # Keep non-list fields from raw pre-tool results first
                     if isinstance(pre_tool_results, dict):
                         for key, value in pre_tool_results.items():
                             if not isinstance(value, list):
                                 item_pre_tool_results[key] = value
                     
-                    # 然后用 item 的数据覆盖（item 优先级更高）
+                    # Then overwrite with item data (item priority is higher)
                     if isinstance(item, dict):
                         item_pre_tool_results.update(item)
                     
-                    # 使用简单模式处理单个项
-                    log.info(f"[process_item]开始处理并行项 {item_pre_tool_results}")
+                    # Use simple mode for a single item
+                    log.info(f"[process_item] Start processing parallel item {item_pre_tool_results}")
                     result = await self.process_simple_mode(state, item_pre_tool_results)
                     return result
                 except Exception as e:
-                    log.error(f"并行处理单个项失败: {e}")
+                    log.error(f"Parallel item processing failed: {e}")
                     return {"error": str(e)}
         
-        # ----- 并行执行所有任务 -----
+        # ----- Execute all tasks in parallel -----
         tasks = [process_item(item) for item in parallel_items]
         results = await asyncio.gather(*tasks)
         
-        log.info(f"并行模式执行完成，共处理 {len(results)} 个任务")
+        log.info(f"Parallel mode execution complete, processed {len(results)} tasks")
         
         return {
             "parallel_results": results,
@@ -945,115 +945,115 @@ class BaseAgent(ABC):
         }
 
     # =========================================================================
-    # G. 执行模式 - 图模式（ReAct 子图）
+    # G. Execution Mode - Graph Mode (ReAct Subgraph)
     # =========================================================================
     
     async def _execute_react_graph(self, state: MainState, pre_tool_results: Dict[str, Any]) -> Dict[str, Any]:
         """
-        自动构建和执行 ReAct 子图
+        Automatically build and execute ReAct subgraph
         
-        使用 LangGraph 构建包含 assistant 和 tools 节点的子图，
-        实现工具调用的自动循环。
+        Use LangGraph to build a subgraph containing assistant and tools nodes,
+        implement automatic tool calling loops.
         
         Args:
-            state (MainState): 主状态对象
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            state (MainState): Main state object
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            Dict[str, Any]: 子图执行结果
+            Dict[str, Any]: Subgraph execution results
         
-        子图结构：
+        Subgraph structure:
             entry -> assistant -> [tools_condition] -> tools -> assistant -> ...
         """
         from langgraph.graph import StateGraph
         from langgraph.prebuilt import ToolNode, tools_condition
         
-        log.info(f"开始构建 {self.role_name} 的子图...")
+        log.info(f"Starting to build {self.role_name} subgraph...")
         
-        # 1. 获取后置工具
+        # 1. Get post-tools
         post_tools = self.get_post_tools()
         if not post_tools:
-            log.warning(f"{self.role_name} 没有后置工具，回退到简单模式")
+            log.warning(f"{self.role_name} No post-tools, falling back to simple mode")
             return await self.process_simple_mode(state, pre_tool_results)
                 
-        # 2. 使用 MainState 作为子图状态
+        # 2. Use MainState as subgraph state
         log.critical(f"state: {state.agent_results}")
         subgraph = StateGraph(type(state))
         
-        # 3. 创建 assistant 节点函数
+        # 3. Create assistant node function
         assistant_func = self.create_assistant_node_func(state, pre_tool_results)
         
-        # 4. 添加节点
+        # 4. Add nodes
         subgraph.add_node("assistant", assistant_func)
         subgraph.add_node("tools", ToolNode(post_tools))
         
-        # 5. 添加边
+        # 5. Add edges
         subgraph.add_conditional_edges("assistant", tools_condition)
         subgraph.add_edge("tools", "assistant")
         
-        # 6. 设置入口点
+        # 6. Set entry point
         subgraph.set_entry_point("assistant")
         
-        # 7. 编译并执行
+        # 7. Compile and execute
         compiled_graph = subgraph.compile()
-        log.info(f"{self.role_name} 子图编译完成")
+        log.info(f"{self.role_name} subgraph compilation complete")
         
         try:
-            # 执行子图
+            # Execute subgraph
             final_state = await compiled_graph.ainvoke(state)
-            log.info(f"{self.role_name} 子图执行完成")
+            log.info(f"{self.role_name} subgraph execution complete")
             
-            # 8. 从 final_state 中提取结果
+            # 8. Extract results from final_state
             result = final_state["agent_results"].get(self.role_name.lower(), {}).get("results", {})
 
             if "messages" in final_state:
-                # 9. 更新状态中的 messages
+                # 9. Update messages in state
                 state.messages = final_state["messages"]
             
             if not result:
-                log.error("子图执行后未找到结果")
-                return {"error": "子图执行异常：未找到结果"}
+                log.error("No results found after subgraph execution")
+                return {"error": "Subgraph execution exception: No results found"}
             
-            log.info(f"{self.role_name} 子图结果解析完成")
+            log.info(f"{self.role_name} subgraph result parsing complete")
             return result
             
         except Exception as e:
-            log.exception(f"{self.role_name} 子图执行失败: {e}")
-            return {"error": f"子图执行失败: {str(e)}"}
+            log.exception(f"{self.role_name} subgraph execution failed: {e}")
+            return {"error": f"Subgraph execution failed: {str(e)}"}
     
     def create_assistant_node_func(self, state: MainState, pre_tool_results: Dict[str, Any]):
         """
-        创建 assistant 节点函数
+        Create assistant node function
         
-        为 LangGraph 子图创建 assistant 节点的处理函数。
+        Create assistant node handler for LangGraph subgraph.
         
         Args:
-            state (MainState): 主状态对象
-            pre_tool_results (Dict[str, Any]): 前置工具执行结果
+            state (MainState): Main state object
+            pre_tool_results (Dict[str, Any]): Pre-tool execution results
         
         Returns:
-            Callable: 异步节点处理函数
+            Callable: Async node handler function
         """
         async def assistant_node(graph_state):
-            # 获取或构建消息
+            # Get or build messages
             messages = graph_state.get("messages", [])
             if not messages:
                 messages = self.build_messages(state, pre_tool_results)
-                log.info(f"构建 {self.role_name} 初始消息，包含前置工具结果")
+                log.info(f"Building {self.role_name} initial message, including pre-tool results")
 
-            # 调用 LLM
+            # Call LLM
             response = await self.process_with_llm_for_graph(messages, state)
 
-            # 检查是否有工具调用
+            # Check for tool calls
             if self.has_tool_calls(response):
-                log.info(f"[create_assistant_node_func]: {self.role_name} LLM选择调用工具: ...")
+                log.info(f"[create_assistant_node_func]: {self.role_name} LLM chose to call tools: ...")
                 return {"messages": messages + [response]}
             else:
-                # 没有工具调用，解析最终结果
-                log.info(f"[create_assistant_node_func]: {self.role_name} LLM本次未调用工具，解析最终结果")
+                # No tool calls, parsing final results
+                log.info(f"[create_assistant_node_func]: {self.role_name} LLM did not call tools this time, parsing final results")
                 result = self.parse_result(response.content)
                 
-                # 同步 agent_results
+                # Sync agent_results
                 state.agent_results[self.role_name.lower()] = {
                     "pre_tool_results": pre_tool_results,
                     "post_tools": [t.name for t in self.get_post_tools()],
@@ -1069,17 +1069,17 @@ class BaseAgent(ABC):
         return assistant_node
 
     # =========================================================================
-    # H. ReAct 验证器
+    # H. ReAct Validators
     # =========================================================================
     
     def get_react_validators(self) -> List[ValidatorFunc]:
         """
-        获取 ReAct 模式的验证器列表 - 子类可重写
+        Get ReAct mode validators list - subclasses can override
         
-        验证器用于检查 LLM 输出是否符合预期格式和内容要求。
+        Validators are used to check if LLM output meets expected format and requirements.
         
         Returns:
-            List[ValidatorFunc]: 验证器函数列表
+            List[ValidatorFunc]: Validator functions list
         
         Example:
             >>> def get_react_validators(self):
@@ -1096,41 +1096,40 @@ class BaseAgent(ABC):
     @staticmethod
     def _default_json_validator(content: str, parsed_result: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
-        默认 JSON 格式验证器
-        
-        检查解析结果是否为有效的非空 JSON。
+        Default JSON format validator.
+        Checks if the parsing result is a valid non-empty JSON.
         
         Args:
-            content (str): LLM 原始输出
-            parsed_result (Dict[str, Any]): 解析后的结果
+            content (str): Raw LLM output
+            parsed_result (Dict[str, Any]): Parsed result
         
         Returns:
-            Tuple[bool, Optional[str]]: (是否通过, 错误信息)
+            Tuple[bool, Optional[str]]: (Success, Error message)
         """
-        # 检查是否解析失败（只有 raw 字段）
+        # Check if parsing failed (only 'raw' field remains)
         if "raw" in parsed_result and len(parsed_result) == 1:
             return False, (
-                "你返回的内容不是有效的JSON格式。请确保返回纯JSON格式的数据，"
-                "不要包含其他文字说明。正确的格式示例：\n"
+                "The content you returned is not in valid JSON format. Please ensure you return data in pure JSON format, "
+                "without any other text explanations. Correct format example:\n"
                 '{"key1": "value1", "key2": "value2"}'
             )
         
-        # 检查是否为空字典
+        # Check for empty dictionary
         if not parsed_result or (isinstance(parsed_result, dict) and not parsed_result):
-            return False, "你返回的JSON为空，请提供完整的结果数据。"
+            return False, "The returned JSON is empty. Please provide complete result data."
         
         return True, None
     
     def _run_validators(self, content: str, parsed_result: Dict[str, Any]) -> Tuple[bool, List[str]]:
         """
-        运行所有验证器
+        Run all validators.
         
         Args:
-            content (str): LLM 原始输出
-            parsed_result (Dict[str, Any]): 解析后的结果
+            content (str): Raw LLM output
+            parsed_result (Dict[str, Any]): Parsed result
         
         Returns:
-            Tuple[bool, List[str]]: (是否全部通过, 错误信息列表)
+            Tuple[bool, List[str]]: (Success, List of error messages)
         """
         validators = self.get_react_validators()
         errors = []
@@ -1140,93 +1139,93 @@ class BaseAgent(ABC):
                 passed, error_msg = validator(content, parsed_result)
                 if not passed:
                     validator_name = getattr(validator, '__name__', f'validator_{i}')
-                    log.warning(f"验证器 {validator_name} 未通过: {error_msg}")
+                    log.warning(f"Validator {validator_name} failed: {error_msg}")
                     if error_msg:
                         errors.append(error_msg)
             except Exception as e:
-                log.exception(f"验证器执行出错: {e}")
-                errors.append(f"验证过程出错: {str(e)}")
+                log.exception(f"Validator execution error: {e}")
+                errors.append(f"Validation process error: {str(e)}")
         
         return len(errors) == 0, errors
     
     def _build_validation_feedback(self, errors: List[str]) -> str:
         """
-        构建验证失败的反馈消息
+        Build feedback message for validation failure.
         
         Args:
-            errors (List[str]): 错误信息列表
+            errors (List[str]): List of error messages
         
         Returns:
-            str: 格式化的反馈消息
+            str: Formatted feedback message
         """
         if not errors:
-            return "输出格式有误，请按要求重新生成。"
+            return "Output format is incorrect. Please regenerate according to requirements."
         
-        feedback_parts = ["你的输出存在以下问题，请修正后重新生成：\n"]
+        feedback_parts = ["Your output has the following issues. Please correct them and regenerate:\n"]
         for i, error in enumerate(errors, 1):
             feedback_parts.append(f"{i}. {error}")
         
-        feedback_parts.append("\n请仔细检查并重新输出正确的结果。")
+        feedback_parts.append("\nPlease double-check and output the correct result.")
         return "\n".join(feedback_parts)
 
     # =========================================================================
-    # I. Agent-as-Tool 功能
+    # I. Agent-as-Tool functionality
     # =========================================================================
     
     def get_tool_name(self) -> str:
         """
-        获取作为工具时的名称 - 子类可重写
+        Get the name when used as a tool - subclasses can override.
         
         Returns:
-            str: 工具名称，格式为 "call_{role_name}_agent"
+            str: Tool name, format "call_{role_name}_agent"
         """
         return f"call_{self.role_name.lower()}_agent"
 
     def get_tool_description(self) -> str:
         """
-        获取作为工具时的描述 - 子类应重写提供更具体的描述
+        Get the description when used as a tool - subclasses should override to provide specific details.
         
         Returns:
-            str: 工具描述
+            str: Tool description
         """
-        return f"调用 {self.role_name} agent 来执行特定任务。该 agent 会根据输入参数执行相应的分析和处理。"
+        return f"Invoke {self.role_name} agent to perform specific tasks. This agent will execute analysis and processing based on input parameters."
 
     def get_tool_args_schema(self) -> Type[BaseModel]:
         """
-        获取作为工具时的参数模式 - 子类可重写
+        Get the parameter schema when used as a tool - subclasses can override.
         
         Returns:
-            Type[BaseModel]: Pydantic 模型类，定义工具参数结构
+            Type[BaseModel]: Pydantic model class defining tool parameters
         """
         class DefaultAgentToolArgs(BaseModel):
-            """默认 Agent 工具参数"""
+            """Default Agent tool parameters"""
             task_description: str = Field(
-                description=f"传递给 {self.role_name} 的任务描述或指令"
+                description=f"Task description or instruction passed to {self.role_name}"
             )
             additional_params: Optional[Dict[str, Any]] = Field(
                 default=None,
-                description="额外的参数，会被合并到前置工具结果中"
+                description="Extra parameters to be merged into pre-tool results"
             )
         
         return DefaultAgentToolArgs
 
     def prepare_tool_execution_params(self, **tool_kwargs) -> Dict[str, Any]:
         """
-        准备工具执行时的参数 - 子类可重写
+        Prepare parameters for tool execution - subclasses can override
         
         Args:
-            **tool_kwargs: 工具调用时传入的参数
+            **tool_kwargs: Parameters passed during tool call
         
         Returns:
-            Dict[str, Any]: 处理后的参数字典
+            Dict[str, Any]: Processed parameters dictionary
         """
         params = {}
         
-        # 合并 additional_params
+        # Merge additional_params
         if 'additional_params' in tool_kwargs and tool_kwargs['additional_params']:
             params.update(tool_kwargs['additional_params'])
         
-        # 添加其他参数
+        # Add other parameters
         for key, value in tool_kwargs.items():
             if key != 'additional_params':
                 params[key] = value
@@ -1235,49 +1234,49 @@ class BaseAgent(ABC):
 
     def extract_tool_result(self, state: MainState) -> Dict[str, Any]:
         """
-        从状态中提取工具调用的结果 - 子类可重写
+        Extract tool call results from state - subclasses can override
         
         Args:
-            state (MainState): 执行后的状态对象
+            state (MainState): State object after execution
         
         Returns:
-            Dict[str, Any]: 提取的结果
+            Dict[str, Any]: Extracted results
         """
         agent_result = state.agent_results.get(self.role_name, {})
         return agent_result.get('results', {})
 
     async def _execute_as_tool(self, state: MainState, **tool_kwargs) -> Dict[str, Any]:
         """
-        作为工具执行的内部方法
+        Internal method for executing as a tool.
         
         Args:
-            state (MainState): 当前状态对象
-            **tool_kwargs: 工具参数
+            state (MainState): Current state object
+            **tool_kwargs: Tool parameters
         
         Returns:
-            Dict[str, Any]: 执行结果
+            Dict[str, Any]: Execution results
         """
         try:
-            log.info(f"[Agent-as-Tool] 调用 {self.role_name}，参数: {tool_kwargs}")
+            log.info(f"[Agent-as-Tool] Invoking {self.role_name}, parameters: {tool_kwargs}")
             
-            # 准备执行参数
+            # Prepare execution parameters
             exec_params = self.prepare_tool_execution_params(**tool_kwargs)
             
-            # 执行 Agent
+            # Execute Agent
             result_state = await self.execute(
                 state, 
                 use_agent=False,
                 **exec_params
             )
             
-            # 提取结果
+            # Extract result
             result = self.extract_tool_result(result_state)
             
-            log.info(f"[Agent-as-Tool] {self.role_name} 执行完成")
+            log.info(f"[Agent-as-Tool] {self.role_name} execution complete")
             return result
             
         except Exception as e:
-            log.exception(f"[Agent-as-Tool] {self.role_name} 执行失败: {e}")
+            log.exception(f"[Agent-as-Tool] {self.role_name} execution failed: {e}")
             return {
                 "error": str(e),
                 "agent": self.role_name,
@@ -1286,17 +1285,17 @@ class BaseAgent(ABC):
 
     def as_tool(self, state: MainState) -> Tool:
         """
-        将 Agent 包装成可被调用的工具
+        Wrap Agent as a callable tool
         
         Args:
-            state (MainState): 状态对象，将被传递给 Agent 执行
+            state (MainState): State object, passed to Agent for execution
         
         Returns:
-            Tool: LangChain Tool 实例
+            Tool: LangChain Tool instance
         
         Example:
             >>> writer_tool = writer_agent.as_tool(state)
-            >>> result = await writer_tool.ainvoke({"task_description": "写一篇文章"})
+            >>> result = await writer_tool.ainvoke({"task_description": "Write an article"})
         """
         async def agent_tool_func(**kwargs) -> Dict[str, Any]:
             return await self._execute_as_tool(state, **kwargs)
@@ -1313,24 +1312,23 @@ class BaseAgent(ABC):
         )
 
     # =========================================================================
-    # J. 状态管理与输出
+    # J. State Management and Output
     # =========================================================================
     
     def update_state_result(self, state: MainState, result: Dict[str, Any], pre_tool_results: Dict[str, Any]):
         """
-        更新状态结果 - 子类可重写
-        
-        将执行结果存储到状态对象中。
+        Update state result - subclasses can override.
+        Saves execution results to the state object.
         
         Args:
-            state (MainState): 状态对象
-            result (Dict[str, Any]): 执行结果
-            pre_tool_results (Dict[str, Any]): 前置工具结果
+            state (MainState): State object
+            result (Dict[str, Any]): Execution results
+            pre_tool_results (Dict[str, Any]): Pre-tool results
         """
-        # 将结果存储到与角色名对应的属性中
+        # Store results in attributes corresponding to role name
         setattr(state, self.role_name.lower(), result)
         
-        # 存储到 agent_results
+        # Store in agent_results
         state.agent_results[self.role_name] = {
             "pre_tool_results": pre_tool_results,
             "post_tools": [t.name for t in self.get_post_tools()],
@@ -1339,98 +1337,98 @@ class BaseAgent(ABC):
 
     def store_outputs(self, data, file_name: str = None) -> str:
         """
-        保存输出结果到文件
+        Save output results to a file.
         
         Args:
-            data: 要保存的数据
-            file_name (str, optional): 文件名，默认使用时间戳
+            data: Data to be saved
+            file_name (str, optional): Filename, default is timestamp
         
         Returns:
-            str: 保存的文件路径
+            str: Saved file path
         """
         # 创建输出目录
         out_dir = Path(f"{PROJDIR}/outputs/{self.role_name.lower()}")
         out_dir.mkdir(parents=True, exist_ok=True)
         
-        # 生成文件名
+        # Generate filename
         if not file_name:
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"{ts}.pkl"
         
         file_path = out_dir / file_name
         
-        # 保存数据
+        # Save data
         with open(file_path, "wb") as f:
             pickle.dump(data, f)
         
-        log.info(f"已保存->: {file_path}")
+        log.info(f"Saved to ->: {file_path}")
         return str(file_path)
 
     # =========================================================================
-    # K. 主执行入口
+    # K. Main Execution Entry
     # =========================================================================
     
     async def execute(self, state: MainState, use_agent: bool = False, **kwargs) -> MainState:
         """
-        统一执行入口 - Agent 的核心执行方法
+        Unified execution entry - Core execution method of the Agent
         
-        根据配置选择合适的执行模式，完成 Agent 的完整执行流程。
+        Select appropriate execution mode based on configuration to complete Agent's full execution flow.
         
         Args:
-            state (MainState): 当前状态对象
-            use_agent (bool): 是否使用代理模式（图模式），默认 False
-            **kwargs: 额外参数，会被合并到前置工具结果中
+            state (MainState): Current state object
+            use_agent (bool): Whether to use proxy mode (graph mode), default False
+            **kwargs: Extra parameters, merged into pre-tool results
         
         Returns:
-            MainState: 更新后的状态对象
+            MainState: Updated state object
         
-        执行流程：
-            1. 检查是否使用策略模式
-            2. 检查是否使用 VLM 模式
-            3. 执行前置工具
-            4. 根据配置选择执行模式：
-               - 图模式（use_agent=True 且有后置工具）
-               - ReAct 模式（react_mode=True）
-               - 简单模式（默认）
-            5. 更新状态结果
+        Execution flow:
+            1. Check for strategy mode
+            2. Check for VLM mode
+            3. Execute pre-tools
+            4. Select execution mode based on configuration:
+               - Graph mode (use_agent=True with post-tools)
+               - ReAct mode (react_mode=True)
+               - Simple mode (default)
+            5. Update state result
         
         Example:
             >>> state = await agent.execute(state, use_agent=True)
             >>> result = state.agent_results["Writer"]["results"]
         """
-        # 保存状态引用
+        # Save state reference
         self.state = state
         
-        # ----- 策略模式执行 -----
+        # ----- Strategy Mode Execution -----
         if self._execution_strategy:
-            log.info(f"使用策略模式执行: {self._execution_strategy.__class__.__name__}")
+            log.info(f"Executing with strategy mode: {self._execution_strategy.__class__.__name__}")
             try:
                 pre_tool_results = await self.execute_pre_tools(state)
                 result = await self._execution_strategy.execute(state, **kwargs)
                 self.update_state_result(state, result, pre_tool_results)
                 return state
             except Exception as e:
-                log.exception(f"策略执行失败: {e}")
+                log.exception(f"Strategy execution failed: {e}")
                 error_result = {"error": str(e)}
                 self.update_state_result(state, error_result, {})
                 return state
             
-        # ----- 常规执行流程 -----
-        log.info(f"开始执行 {self.role_name} (ReAct模式: {self.react_mode}, 图模式: {use_agent})")
+        # ----- Normal Execution Flow -----
+        log.info(f"Starting execution for {self.role_name} (ReAct mode: {self.react_mode}, Graph mode: {use_agent})")
 
-        # VLM 模式
+        # VLM Mode
         if getattr(self, "use_vlm", False):
-            log.critical(f'[base agent]: 走多模态路径')
+            log.critical(f'[base agent]: Taking multimodal path')
             result = await self._execute_vlm(state, **kwargs)
             self.update_state_result(state, result, {})
-            log.info(f"{self.role_name} 多模态执行完成")
+            log.info(f"{self.role_name} Multimodal execution complete")
             return state
         
         try:
-            # 1. 执行前置工具
+            # 1. Execute pre-tools
             pre_tool_results = await self.execute_pre_tools(state)
             
-            # 1.1 写入 temp_data
+            # 1.1 Write to temp_data
             try:
                 if not hasattr(state, 'temp_data') or state.temp_data is None:
                     state.temp_data = {}
@@ -1438,44 +1436,44 @@ class BaseAgent(ABC):
             except Exception:
                 pass
             
-            # 1.2 合并 kwargs 到前置工具结果
+            # 1.2 Merge kwargs into pre-tool results
             pre_tool_results.update(kwargs)
             
-            # 2. 获取后置工具
+            # 2. Get post-tools
             post_tools = self.get_post_tools()
             
-            # 3. 根据模式选择处理方式
+            # 3. Select processing method based on mode
             if use_agent and post_tools:
-                # ----- 图模式 -----
-                log.info(f"[子图新模式] 自动构建 {self.role_name} 的子图，"
-                        f"后置工具: {[t.name for t in post_tools]}")
+                # ----- Graph Mode -----
+                log.info(f"[New Subgraph Mode] Automatically building {self.role_name} subgraph, "
+                        f"Post-tools: {[t.name for t in post_tools]}")
                 result = await self._execute_react_graph(state, pre_tool_results)
                 self.update_state_result(state, result, pre_tool_results)
-                log.info(f"[子图新模式] {self.role_name} 子图模式执行完成")
+                log.info(f"[New Subgraph Mode] {self.role_name} subgraph mode execution complete")
                 
-                # 更新 temp_data
+                # Update temp_data
                 if not hasattr(state, 'temp_data'):
                     state.temp_data = {}
                 state.temp_data['pre_tool_results'] = pre_tool_results
                 state.temp_data[f'{self.role_name}_instance'] = self
                 
             elif self.react_mode:
-                # ----- ReAct 模式 -----
-                log.info("ReAct模式 - 带验证循环")
+                # ----- ReAct Mode -----
+                log.info("ReAct Mode - with validation loop")
                 result = await self.process_react_mode(state, pre_tool_results)
                 self.update_state_result(state, result, pre_tool_results)
-                log.info(f"{self.role_name} ReAct模式执行完成")
+                log.info(f"{self.role_name} ReAct mode execution complete")
                 
             else:
-                # ----- 简单模式 -----
+                # ----- Simple Mode -----
                 if use_agent and not post_tools:
-                    log.info("图模式无可用后置工具，回退到简单模式")
+                    log.info("No post-tools available for graph mode, falling back to simple mode")
                 result = await self.process_simple_mode(state, pre_tool_results)
                 self.update_state_result(state, result, pre_tool_results)
-                log.info(f"{self.role_name} 简单模式执行完成")
+                log.info(f"{self.role_name} Simple mode execution complete")
             
         except Exception as e:
-            log.exception(f"{self.role_name} 执行失败: {e}")
+            log.exception(f"{self.role_name} Execution failed: {e}")
             import traceback
             traceback.print_exc()
             error_result = {"error": str(e)}
@@ -1485,25 +1483,25 @@ class BaseAgent(ABC):
     
     async def _execute_vlm(self, state: MainState, **kwargs) -> Dict[str, Any]:
         """
-        Vision-LLM 专用执行流程
+        Vision-LLM Specialized Execution Flow
         
-        与文本链路完全解耦，专门处理视觉语言模型的调用。
+        Completely decoupled from the text path, specifically handles Vision Language Model calls.
         
         Args:
-            state (MainState): 当前状态对象
-            **kwargs: 额外参数
+            state (MainState): Current state object
+            **kwargs: Additional parameters
         
         Returns:
-            Dict[str, Any]: VLM 执行结果
+            Dict[str, Any]: VLM execution results
         """
-        # 1. 执行前置工具
+        # 1. Execute pre-tools
         pre_tool_results = await self.execute_pre_tools(state)
     
-        # 2. 构建消息
+        # 2. Build messages
         mode = self.vlm_config.get("mode", "understanding")
         messages = self.build_messages(state, pre_tool_results)
     
-        # 3. 调用 VisionLLMCaller
+        # 3. Call VisionLLMCaller
         from workflow_engine.llm_callers import VisionLLMCaller
         vlm_caller = VisionLLMCaller(
             state,
@@ -1515,24 +1513,24 @@ class BaseAgent(ABC):
             tool_manager=self.tool_manager,
         )
         response = await vlm_caller.call(messages)
-        log.info(f"{self.role_name} 多模态原始响应: {response}")
+        log.info(f"{self.role_name} Multimodal raw response: {response}")
     
         # 4. 解析结果
         parsed = self.parse_result(response.content)
     
-        # 5. 合并附加信息（如图像路径、base64 等）
+        # 5. Merge additional info (e.g., image path, base64, etc.)
         if hasattr(response, "additional_kwargs"):
-            log.info(f"{self.role_name} 多模态附加信息: {response.additional_kwargs}")
+            log.info(f"{self.role_name} Multimodal additional info: {response.additional_kwargs}")
             
             if isinstance(parsed, dict):
                 parsed.update(response.additional_kwargs)
             elif isinstance(parsed, list):
-                log.warning(f"{self.role_name} parsed 是列表类型，无法调用 update 方法，跳过附加参数合并")
-                log.info(f"parsed 类型: {type(parsed).__name__}, 内容: {parsed}")
-                log.info(f"additional_kwargs 内容: {response.additional_kwargs}")
+                log.warning(f"{self.role_name} parsed is a list type, cannot call update, skipping additional parameters merge")
+                log.info(f"parsed type: {type(parsed).__name__}, content: {parsed}")
+                log.info(f"additional_kwargs content: {response.additional_kwargs}")
             else:
-                log.warning(f"{self.role_name} parsed 是 {type(parsed).__name__} 类型，无法调用 update 方法，跳过附加参数合并")
-                log.info(f"parsed 内容: {parsed}")
-                log.info(f"additional_kwargs 内容: {response.additional_kwargs}")
+                log.warning(f"{self.role_name} parsed is {type(parsed).__name__} type, cannot call update, skipping additional parameters merge")
+                log.info(f"parsed content: {parsed}")
+                log.info(f"additional_kwargs content: {response.additional_kwargs}")
         
         return parsed
