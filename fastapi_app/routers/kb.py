@@ -436,18 +436,29 @@ async def upload_kb_file(
             "embedded": embedded,
         }
         
-        # Trigger suggested questions update
-        from fastapi_app.services.suggest_questions import update_suggested_questions_task
+        # Trigger litigation intelligence update
+        from fastapi_app.services.litigation_service import update_litigation_intelligence_task
         if background_tasks:
+            # Get respondent from case if possible
+            our_respondent = None
+            try:
+                from fastapi_app.services.lawnidhi.case_notebook_linker import get_case_for_notebook
+                case = get_case_for_notebook(notebook_id)
+                if case:
+                    our_respondent = case.respondent
+            except Exception:
+                pass
+
             background_tasks.add_task(
-                update_suggested_questions_task,
+                update_litigation_intelligence_task,
                 notebook_id,
                 notebook_title or "",
                 email,
-                user_id,
+                user_id or "local",
                 settings.DEFAULT_LLM_API_URL,
                 settings.DEFAULT_LLM_API_KEY or settings.HF_TOKEN,
-                settings.KB_CHAT_MODEL
+                settings.KB_CHAT_MODEL,
+                our_respondent
             )
             
         return response_data
@@ -559,18 +570,28 @@ async def add_text_source(
         "id": f"file-{source_info.original_path.name}",
     }
     
-    # Trigger suggested questions update
-    from fastapi_app.services.suggest_questions import update_suggested_questions_task
+    # Trigger litigation intelligence update
+    from fastapi_app.services.litigation_service import update_litigation_intelligence_task
     if background_tasks:
+        our_respondent = None
+        try:
+            from fastapi_app.services.lawnidhi.case_notebook_linker import get_case_for_notebook
+            case = get_case_for_notebook(notebook_id)
+            if case:
+                our_respondent = case.respondent
+        except Exception:
+            pass
+
         background_tasks.add_task(
-            update_suggested_questions_task,
+            update_litigation_intelligence_task,
             notebook_id,
             notebook_title or "",
             email,
             user_id or "local",
             settings.DEFAULT_LLM_API_URL,
             settings.DEFAULT_LLM_API_KEY or settings.HF_TOKEN,
-            settings.KB_CHAT_MODEL
+            settings.KB_CHAT_MODEL,
+            our_respondent
         )
         
     return response_data
@@ -666,18 +687,28 @@ async def import_url_as_source(
         "id": f"file-{source_info.original_path.name}",
     }
     
-    # Trigger suggested questions update
-    from fastapi_app.services.suggest_questions import update_suggested_questions_task
+    # Trigger litigation intelligence update
+    from fastapi_app.services.litigation_service import update_litigation_intelligence_task
     if background_tasks:
+        our_respondent = None
+        try:
+            from fastapi_app.services.lawnidhi.case_notebook_linker import get_case_for_notebook
+            case = get_case_for_notebook(notebook_id)
+            if case:
+                our_respondent = case.respondent
+        except Exception:
+            pass
+
         background_tasks.add_task(
-            update_suggested_questions_task,
+            update_litigation_intelligence_task,
             notebook_id,
             notebook_title or "",
             email,
             user_id or "local",
             settings.DEFAULT_LLM_API_URL,
             settings.DEFAULT_LLM_API_KEY or settings.HF_TOKEN,
-            settings.KB_CHAT_MODEL
+            settings.KB_CHAT_MODEL,
+            our_respondent
         )
         
     return response_data

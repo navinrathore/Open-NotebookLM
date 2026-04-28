@@ -9,7 +9,8 @@ import asyncio
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union, Tuple
+import faiss
+import numpy as np
 
 # Central Logger
 from workflow_engine.logger import get_logger

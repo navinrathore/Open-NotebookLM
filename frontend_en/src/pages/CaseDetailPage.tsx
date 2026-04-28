@@ -4,7 +4,7 @@ import {
   ChevronLeft, Scale, Calendar, User, Briefcase, 
   FileText, MessageSquare, ExternalLink, Download,
   Clock, Info, Shield, Hash, Send, Bot, User as UserIcon, Loader2,
-  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload, Globe, Type, MoreVertical, Trash2, RefreshCw
+  Sparkles, Brain, ChevronRight, Image as ImageIcon, BrainCircuit, Plus, ArrowRight, X, Upload, Globe, Type, MoreVertical, Trash2, RefreshCw, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { Case, CaseDocument } from '../types/case';
 import { apiFetch } from '../config/api';
@@ -42,6 +42,9 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
   const [activeMenuDocId, setActiveMenuDocId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<CaseDocument | null>(null);
   const [reindexLoading, setReindexLoading] = useState(false);
+  const [caseIntelligence, setCaseIntelligence] = useState<any>(caseItem.intelligence || null);
+  const [showCoram, setShowCoram] = useState(false);
+  const [actionItemStatuses, setActionItemStatuses] = useState<Record<string, boolean>>({});
   
   // Three-column layout state
   const [leftPanelWidth, setLeftPanelWidth] = useState(380);
@@ -50,17 +53,42 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
   const [activeTool, setActiveTool] = useState<string>('chat');
   const [resizing, setResizing] = useState<'left' | 'right' | null>(null);
 
-  useEffect(() => {
-    fetchDocuments();
-    // Initialize chat with a welcome message
-    setChatMessages([
-      {
-        role: 'assistant',
-        content: `Welcome to the Case Workspace for **${caseItem.case_number}/${caseItem.case_year}**. I've analyzed the available filings and orders. How can I help you today?`,
-        time: new Date().toLocaleTimeString()
+  const fetchCaseIntelligence = async () => {
+    try {
+      const res = await apiFetch(`/api/v1/cases/${caseItem.case_number}/${caseItem.case_year}`);
+      const data = await res.json();
+      if (data.success && data.case?.intelligence) {
+        setCaseIntelligence(data.case.intelligence);
+        // Load manual statuses from intelligence if available
+        if (data.case.intelligence.status_mappings) {
+          setActionItemStatuses(data.case.intelligence.status_mappings);
+        }
       }
-    ]);
-  }, [caseItem]);
+    } catch (err) {
+      console.error('Failed to fetch case intelligence:', err);
+    }
+  };
+
+  const handleRecalculateIntelligence = async () => {
+    try {
+      await apiFetch(`/api/v1/cases/${caseItem.case_number}/${caseItem.case_year}/recalculate-intelligence`, {
+        method: 'POST'
+      });
+      // Show a temporary success state or just rely on the background task
+      alert("AI synthesis started in the background. Please refresh in a few seconds.");
+    } catch (err) {
+      console.error('Recalculation failed:', err);
+    }
+  };
+
+  const calculateDaysLeft = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      const diff = d.getTime() - new Date().getTime();
+      const days = Math.ceil(diff / (1000 * 3600 * 24));
+      return days;
+    } catch { return null; }
+  };
 
   const fetchDocuments = async () => {
     setLoadingDocs(true);
@@ -98,7 +126,7 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
             url: resolvedUrl,
             local_path: f.original_path,
             type: f.file_type || 'upload',
-            status: f.status === 'done' ? 'AI-Indexed & Ready' : (f.status || 'imported'),
+            status: f.status === 'done' ? 'AI-Indexed</span>{doc.type === "order" && (<span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-wider border border-indigo-100 flex items-center gap-1"><Sparkles size={10} />Directions Found</span>)}' : (f.status || 'imported'),
             date: f.created_at ? new Date(f.created_at).toLocaleDateString() : 'Added Source'
           };
         });
@@ -144,6 +172,27 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
       setLoadingDocs(false);
     }
   };
+
+  const handleToggleActionStatus = (taskId: string) => {
+    setActionItemStatuses(prev => ({
+      ...prev,
+      [taskId]: !prev[taskId]
+    }));
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+    fetchCaseIntelligence();
+    // Initialize chat with a welcome message
+    setChatMessages([
+      {
+        role: 'assistant',
+        content: `Welcome to the Case Workspace for **${caseItem.case_number}/${caseItem.case_year}**. I've analyzed the available filings and orders. How can I help you today?`,
+        time: new Date().toLocaleTimeString()
+      }
+    ]);
+  }, [caseItem]);
+
 
   const handleReindex = async () => {
     if (!window.confirm("Re-indexing will refresh all AI context with current chunking settings. This may take a moment. Proceed?")) return;
@@ -244,6 +293,20 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
     } finally {
       setIsChatLoading(false);
     }
+  };
+
+  const handleSuggestedQuestionClick = (question: string) => {
+    if (isChatLoading) return;
+    setInputMsg(question);
+    // Submit the message immediately
+    setTimeout(() => {
+      const enterEvent = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        bubbles: true
+      });
+      document.querySelector('input[type=\"text\"]')?.dispatchEvent(enterEvent);
+    }, 100);
   };
 
 
@@ -601,7 +664,7 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
                            <FileText size={18} />
                          </div>
                          <div className="flex-1 overflow-hidden">
-                           <h4 className="text-sm font-bold text-[var(--text-primary)] truncate">{doc.name}</h4>
+                           <div className="flex items-center gap-2 mb-0.5"><h4 className="text-sm font-bold text-[var(--text-primary)] truncate text-left">{doc.name}</h4>{idx === 0 && documents.length > 1 && (<span className="text-[8px] font-bold bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-tighter shadow-sm border border-blue-200">First Order</span>)}{idx === documents.length - 1 && documents.length > 0 && (<span className="text-[8px] font-bold bg-[var(--accent)] text-white px-1.5 py-0.5 rounded uppercase tracking-tighter shadow-sm border border-[var(--accent)]">Latest Order</span>)}</div>
                           <div className="flex items-center gap-2 mt-1">
                             {doc.status === 'available' ? (
                                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase tracking-wider">
@@ -613,9 +676,16 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
                                   <Clock size={10} />
                                   {doc.date || 'Order/Filing'}
                                 </span>
-                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider border border-emerald-100">
-                                  AI-Indexed & Ready
-                                </span>
+                                 <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider border border-emerald-100 flex items-center gap-1">
+                                   <Shield size={10} />
+                                   AI-Indexed
+                                 </span>
+                                 {doc.type === "order" && (
+                                   <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-wider border border-indigo-100 flex items-center gap-1">
+                                      <Sparkles size={10} />
+                                      Directions
+                                   </span>
+                                 )}
                               </div>
                             )}
                           </div>
@@ -751,6 +821,166 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
         
         {/* Center Panel: AI Conversation Lab */}
         <main className="flex-1 flex flex-col bg-[var(--surface)] relative overflow-hidden">
+          {/* Intelligence Dashboard Dashboard */}
+          {!caseIntelligence && documents.some(d => d.type === 'order') && (
+            <div className="bg-amber-50/30 border-b border-amber-100 p-4">
+              <div className="max-w-4xl mx-auto flex items-center justify-between">
+                <div className="flex items-center gap-3 text-amber-700">
+                  <BrainCircuit size={20} className="animate-pulse" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider">Litigation Intel Ready</p>
+                    <p className="text-[10px] opacity-80">Court orders detected. Synthesize intelligence for this case?</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleRecalculateIntelligence}
+                  className="px-4 py-1.5 bg-amber-600 text-white rounded-xl text-[10px] font-bold hover:bg-amber-700 transition-all shadow-sm flex items-center gap-2"
+                >
+                  <Sparkles size={12} />
+                  SYNTHESIZE PULSE
+                </button>
+              </div>
+            </div>
+          )}
+
+          {caseIntelligence && (
+            <div className="bg-[var(--surface-low)] border-b border-[var(--border)] p-6 overflow-y-auto max-h-[40vh]">
+              <div className="max-w-4xl mx-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <BrainCircuit size={18} className="text-[var(--accent)]" />
+                    <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)]">Litigation Pulse</h2>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => setShowCoram(!showCoram)}
+                      className={`text-[10px] font-bold flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${showCoram ? 'bg-[var(--accent)] text-white border-[var(--accent)]' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                    >
+                      <Scale size={12} />
+                      {showCoram ? 'HIDE BENCH' : 'SHOW BENCH'}
+                    </button>
+                    <button 
+                      onClick={handleRecalculateIntelligence}
+                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-400 transition-all"
+                      title="Recalculate Intelligence"
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Action Items List */}
+                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-amber-600 flex items-center gap-2">
+                        <AlertCircle size={14} />
+                        Assigned Action Items
+                      </h3>
+                      {caseIntelligence.our_respondent && (
+                        <span className="text-[9px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded uppercase tracking-tighter">
+                          Focus: {caseIntelligence.our_respondent}
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      {caseIntelligence.latest_intelligence?.action_items?.filter((item: any) => item.is_our_respondent || !caseIntelligence.our_respondent).map((item: any, idx: number) => (
+                        <div key={idx} className="flex gap-3 group">
+                          <input 
+                            type="checkbox"
+                            className="mt-1 w-4 h-4 rounded border-gray-300 text-[var(--accent)] focus:ring-[var(--accent)] cursor-pointer"
+                            checked={actionItemStatuses[`task_${idx}`] || false}
+                            onChange={() => handleToggleActionStatus(`task_${idx}`)}
+                          />
+                          <div className="flex-1">
+                            <p className={`text-xs leading-relaxed transition-all ${actionItemStatuses[`task_${idx}`] ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-200 font-medium'}`}>
+                              {item.task}
+                            </p>
+                            <div className="flex items-center gap-4 mt-1.5">
+                              {item.deadline && (
+                                <span className="text-[9px] text-gray-400 flex items-center gap-1 font-bold">
+                                  <Clock size={10} />
+                                  BY: {item.deadline}
+                                </span>
+                              )}
+                              <button className="text-[9px] text-[var(--accent)] font-bold opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest flex items-center gap-1">
+                                <Brain size={10} />
+                                AI Verify
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Compliance, Baseline & Bench */}
+                  <div className="space-y-4">
+                    <div className="bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/50 rounded-2xl p-5">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-2 flex items-center gap-2">
+                        <CheckCircle2 size={14} />
+                        Compliance Summary
+                      </h3>
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400 leading-relaxed font-medium">
+                        {caseIntelligence.latest_intelligence?.compliance_summary || "No recent compliance noted."}
+                      </p>
+                    </div>
+
+                    <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/50 rounded-2xl p-5">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-2 flex items-center gap-2">
+                        <BrainCircuit size={14} />
+                        Case Baseline (First Order)
+                      </h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-blue-600/70 font-bold uppercase tracking-tighter">Initial Hearing</span>
+                          <span className="text-[10px] text-blue-700 font-bold">{caseIntelligence.first_order_intelligence?.next_hearing || 'N/A'}</span>
+                        </div>
+                        <p className="text-[10px] text-blue-600 leading-relaxed italic">
+                          {caseIntelligence.first_order_intelligence?.petitioner} vs {caseIntelligence.first_order_intelligence?.respondent}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/50 rounded-2xl p-5">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-2 flex items-center gap-2">
+                        <UserIcon size={14} />
+                        Counsel Appearance
+                      </h3>
+                      <p className="text-xs text-indigo-700 dark:text-indigo-400 leading-relaxed font-medium">
+                        {caseIntelligence.latest_intelligence?.counsel_match || "No specific mention of your team in the latest order."}
+                      </p>
+                    </div>
+
+                    <AnimatePresence>
+                      {showCoram && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="bg-neutral-50/50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-700/50 rounded-2xl p-5"
+                        >
+                          <h3 className="text-xs font-bold uppercase tracking-widest text-neutral-600 mb-2 flex items-center gap-2">
+                            <Scale size={14} />
+                            Presiding Bench
+                          </h3>
+                          <div className="space-y-1.5">
+                            {caseIntelligence.latest_intelligence?.judge_coram?.map((judge: string, idx: number) => (
+                              <p key={idx} className="text-[10px] text-neutral-700 dark:text-neutral-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                                {judge}
+                              </p>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-8 space-y-6">
             {chatMessages.map((msg, idx) => (
@@ -786,10 +1016,22 @@ const CaseDetailPage: React.FC<CaseDetailPageProps> = ({ caseItem, onBack }) => 
           {/* Chat Input */}
           <div className="p-6 bg-[var(--surface-low)] border-t border-[var(--border)]">
             <div className="max-w-4xl mx-auto relative group">
-              <div className="absolute -top-10 left-0 right-0 flex justify-center gap-2 mb-2 pointer-events-auto">
-                 <button onClick={() => setIsStudioOpen(!isStudioOpen)} className="px-3 py-1 bg-[var(--surface-high)] border border-[var(--border)] rounded-full text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] transition-all shadow-sm flex items-center gap-1.5 grow-0">
+              <div className="absolute -top-12 left-0 right-0 flex justify-center gap-2 mb-2 pointer-events-auto">
+                 {/* Suggested Questions Bubbles */}
+                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mask-fade-right max-w-full">
+                   {caseIntelligence?.questions?.map((q: string, i: number) => (
+                     <button
+                       key={i}
+                       onClick={() => handleSuggestedQuestionClick(q)}
+                       className="whitespace-nowrap px-3 py-1.5 bg-white dark:bg-gray-800 border border-[var(--border)] rounded-full text-[10px] font-medium text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all shadow-sm shrink-0"
+                     >
+                       {q}
+                     </button>
+                   ))}
+                 </div>
+                 <button onClick={() => setIsStudioOpen(!isStudioOpen)} className="shrink-0 px-3 py-1 bg-[var(--surface-high)] border border-[var(--border)] rounded-full text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--accent)] transition-all shadow-sm flex items-center gap-1.5 grow-0 h-8 mt-1">
                     <Sparkles size={12} className={isStudioOpen ? 'text-[var(--accent)]' : ''} />
-                    {isStudioOpen ? 'HIDE STUDIO' : 'SHOW STUDIO TOOLS'}
+                    {isStudioOpen ? 'STUDIO' : 'TOOLS'}
                  </button>
               </div>
               <input 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, BackgroundTasks
 from pydantic import BaseModel, Field
 
 from workflow_engine.logger import get_logger
@@ -74,6 +74,7 @@ class CaseResponse(BaseModel):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     notebook_id: Optional[str] = None
+    intelligence: Optional[Dict[str, Any]] = None
 
 
 class CaseImportRequest(BaseModel):
@@ -106,6 +107,7 @@ def _case_to_response(case_model, notebook_id: Optional[str] = None) -> CaseResp
         created_at=str(case_model.created_at) if case_model.created_at else None,
         updated_at=str(case_model.updated_at) if case_model.updated_at else None,
         notebook_id=notebook_id,
+        intelligence=kwargs.get("intelligence")
     )
 
 
@@ -223,7 +225,23 @@ async def get_case(case_no: str, case_year: str):
             raise HTTPException(status_code=404, detail=f"Case {case_no}/{case_year} not found")
             
         nb_id = get_notebook_id_for_case(case_no, case_year)
-        return {"success": True, "case": _case_to_response(case, notebook_id=nb_id)}
+        
+        # Fetch intelligence if linked notebook exists
+        intelligence = None
+        if nb_id:
+            try:
+                from fastapi_app.services.litigation_service import get_litigation_intelligence
+                from fastapi_app.notebook_paths import get_notebook_paths
+                # Logic to find the notebook root (check all likely user IDs)
+                for user_id in ["admin", "guest_at_local", "default", "local"]:
+                    nb_p = get_notebook_paths(nb_id, f"Case {case_no}_{case_year}", user_id)
+                    if nb_p.root.exists():
+                        intelligence = get_litigation_intelligence(nb_p.root)
+                        break
+            except Exception:
+                pass
+
+        return {"success": True, "case": _case_to_response(case, notebook_id=nb_id, intelligence=intelligence)}
     except HTTPException:
         raise
     except Exception as e:
@@ -458,4 +476,48 @@ async def case_stats():
         }
     except Exception as e:
         log.error("Failed to get case stats: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{case_no}/{case_year}/recalculate-intelligence")
+async def recalculate_intelligence(
+    case_no: str, 
+    case_year: str, 
+    background_tasks: BackgroundTasks = None
+):
+    """Manually trigger litigation intelligence extraction."""
+    try:
+        from fastapi_app.services.lawnidhi.case_notebook_linker import get_notebook_id_for_case
+        from fastapi_app.services.litigation_service import update_litigation_intelligence_task
+        from lawnidhi.db import my_cases_repo
+        from fastapi_app.fastapi_app_settings import settings
+        from fastapi import BackgroundTasks
+
+        nb_id = get_notebook_id_for_case(case_no, case_year)
+        if not nb_id:
+             log.warning(f"Synthesis requested for {case_no}/{case_year} but no notebook exists.")
+             raise HTTPException(status_code=404, detail="No AI notebook linked to this case")
+        
+        # Identify the respondent to focus the AI extraction on our client
+        case = my_cases_repo.get_case(case_no, case_year)
+        our_respondent = case.respondent if case else None
+
+        if background_tasks:
+            log.info(f"Queueing litigation intelligence synthesis for case {case_no}/{case_year}")
+            background_tasks.add_task(
+                update_litigation_intelligence_task,
+                nb_id,
+                f"Case {case_no}_{case_year}",
+                "admin", # Default workspace user
+                "local", # Local user identifier
+                settings.DEFAULT_LLM_API_URL,
+                settings.DEFAULT_LLM_API_KEY or settings.HF_TOKEN,
+                settings.KB_CHAT_MODEL,
+                our_respondent
+            )
+            return {"success": True, "message": "Intelligence extraction started in background. Monitor the logs for progress."}
+        else:
+            log.error("BackgroundTasks dependency was not injected by FastAPI.")
+            return {"success": False, "message": "System error: Background tasks not available."}
+    except Exception as e:
+        log.error("Recalculation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

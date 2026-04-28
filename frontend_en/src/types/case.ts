@@ -25,6 +25,7 @@ export interface Case {
   notebook_id?: string;
   last_hearing_date?: string;
   next_hearing_date?: string;
+  intelligence?: any;
 }
 
 export interface CaseDocument {
