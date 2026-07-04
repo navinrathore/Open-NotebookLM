@@ -7,9 +7,10 @@ Open-NotebookLM operates primarily via the `workflow_engine/` which handles comp
 - Ensure that the ReAct loops used for deep research have a strict `max_loops` threshold.
 - Graph-based workflows (`workflow_engine/graphbuilder/`) must avoid unbounded cyclic paths without iteration limits.
 
-## 2. Provider Agnostic LLM Interface
-The API relies on an OpenAI-compatible endpoint format (`DEFAULT_LLM_API_URL`), making it naturally provider-agnostic. 
-- Ensure all new features respect this abstraction rather than directly importing proprietary SDKs like `anthropic`.
+## 2. Provider Agnostic LLM Interface (Target Architecture)
+Open-NotebookLM is planned to transition to the Universal LLM Client specification (the `BaseLLMClient` factory pattern) for all model connections. 
+- A configuration-driven approach (e.g., YAML) will be used to seamlessly route between OpenAI-compatible endpoints, local models (HuggingFace, vLLM), and enterprise APIs (AWS Bedrock, Anthropic, Gemini). 
+- Ensure all future refactoring and new features move towards requesting their LLM client via this factory abstraction, rather than hardcoding direct SDK connections like `ChatOpenAI`.
 
 ## 3. Context Management
 When synthesizing large LawNidhi case portfolios:
