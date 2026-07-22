@@ -36,6 +36,9 @@ RAG_RERANK_TOP_N = int(os.getenv("RAG_RERANK_TOP_N", "5"))
 # USE_HYBRID_SEARCH: Toggle for combining Vector search and BM25 search.
 USE_HYBRID_SEARCH = os.getenv("USE_HYBRID_SEARCH", "1") == "1"
 
+# USE_RERANKER: Toggle for Cross-Encoder reranking
+USE_RERANKER = os.getenv("USE_RERANKER", "0") == "1"
+
 MAX_HISTORY_TURNS = 10
 SOURCE_PREVIEW_CHARS = 100
 
